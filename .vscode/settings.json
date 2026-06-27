@@ -1,0 +1,6 @@
+{
+  "C_Cpp.intelliSenseEngine": "disabled",
+  "editor.semanticHighlighting.enabled": false,
+  "clangd.arguments": ["--header-insertion=iwyu"],
+  "editor.inlineSuggest.enabled": false
+}

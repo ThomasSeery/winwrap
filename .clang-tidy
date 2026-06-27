@@ -1,0 +1,23 @@
+# Win32-specific carve-outs (pragma-once is the house style; see CODE_CONVENTIONS):
+#  reinterpret-cast / no-int-to-ptr are inherent to native Win32 -- HWND<->object
+#  round-trips via GWLP_USERDATA + CREATESTRUCT, and the (HBRUSH)(COLOR_x+1) idiom.
+Checks: >
+  -*,
+  bugprone-*,
+  cppcoreguidelines-*,
+  modernize-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  -modernize-use-trailing-return-type,
+  -readability-identifier-length,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -readability-magic-numbers,
+  -readability-braces-around-statements,
+  -portability-avoid-pragma-once,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -performance-no-int-to-ptr
+WarningsAsErrors: ''
+HeaderFilterRegex: 'lib/.*'
+CheckOptions:
+  readability-implicit-bool-conversion.AllowPointerConditions: true

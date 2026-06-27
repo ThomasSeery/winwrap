@@ -1,0 +1,8 @@
+/build/
+/out/
+.cache/
+compile_commands.json
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json

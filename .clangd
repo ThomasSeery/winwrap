@@ -1,0 +1,15 @@
+CompileFlags:
+  CompilationDatabase: build/dev
+  Remove:
+    - -fmodules-ts
+    - -fmodule-mapper=*
+    - -fdeps-format=*
+    # clang rejects ASan + the debug-DLL CRT together; cl allows it, so strip
+    # the sanitizer flag for clangd's parse only (it doesn't affect analysis).
+    - -fsanitize=*
+    - /fsanitize=*
+
+# Build the background index so the "add #include" fix works for non-std
+# symbols (Win32, our own headers) -- std symbols already work via a builtin map.
+Index:
+  Background: Build
