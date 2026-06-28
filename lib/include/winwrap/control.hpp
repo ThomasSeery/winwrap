@@ -9,13 +9,14 @@
 #include <windows.h>
 
 #include <commctrl.h>
-#include <windowsx.h>
 
 #include <expected>
 #include <memory>
 #include <system_error>
 
+#include "winwrap/dispatcher.hpp"
 #include "winwrap/error.hpp"
+#include "winwrap/messages.hpp"
 
 namespace winwrap {
 
@@ -44,7 +45,9 @@ struct ControlConfig {
 ///            `static constexpr const wchar_t* control_class` and be
 ///            default-constructible.
 template <typename T>
-class Control {
+class Control : public Dispatcher<T, Paintable, MouseInput, KeyboardInput, FocusAware> {
+    using messages = Dispatcher<T, Paintable, MouseInput, KeyboardInput, FocusAware>;
+
 public:
     Control(const Control&) = delete;
     Control& operator=(const Control&) = delete;
@@ -76,7 +79,8 @@ public:
 
     /// Routes a message to the matching on_* hook T defines, or to DefSubclassProc
     /// when there is none. Hooks are detected at compile time, so define only the
-    /// ones you need -- as **public** members:
+    /// ones you need -- as **public** members. They come from the composable
+    /// message traits in <winwrap/messages.hpp>, which this base mixes in:
     ///
     ///   - `on_paint()`              -- WM_PAINT
     ///   - `on_mouse_move(x, y)`     -- WM_MOUSEMOVE
@@ -88,53 +92,8 @@ public:
     /// Shadow this whole function in T for anything the named hooks don't cover,
     /// and delegate the rest with `Control::handle_message`.
     LRESULT handle_message(UINT msg, WPARAM wparam, LPARAM lparam) {
-        [[maybe_unused]] T* self = static_cast<T*>(this);
-        switch (msg) {
-            case WM_PAINT:
-                if constexpr (requires { self->on_paint(); }) {
-                    self->on_paint();
-                    return 0;
-                } else
-                    break;
-            case WM_MOUSEMOVE:
-                if constexpr (requires { self->on_mouse_move(0, 0); }) {
-                    self->on_mouse_move(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
-                    return 0;
-                } else
-                    break;
-            case WM_LBUTTONDOWN:
-                if constexpr (requires { self->on_lbutton_down(0, 0); }) {
-                    self->on_lbutton_down(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
-                    return 0;
-                } else
-                    break;
-            case WM_LBUTTONUP:
-                if constexpr (requires { self->on_lbutton_up(0, 0); }) {
-                    self->on_lbutton_up(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
-                    return 0;
-                } else
-                    break;
-            case WM_KEYDOWN:
-                if constexpr (requires { self->on_key_down(0); }) {
-                    self->on_key_down(static_cast<WORD>(wparam));
-                    return 0;
-                } else
-                    break;
-            case WM_SETFOCUS:
-                if constexpr (requires { self->on_focus(true); }) {
-                    self->on_focus(true);
-                    return 0;
-                } else
-                    break;
-            case WM_KILLFOCUS:
-                if constexpr (requires { self->on_focus(true); }) {
-                    self->on_focus(false);
-                    return 0;
-                } else
-                    break;
-            default:
-                break;
-        }
+        if (auto r = messages::dispatch(msg, wparam, lparam))
+            return *r;
         return DefSubclassProc(hwnd_, msg, wparam, lparam);
     }
 

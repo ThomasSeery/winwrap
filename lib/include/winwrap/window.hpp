@@ -12,7 +12,9 @@
 #include <memory>
 #include <system_error>
 
+#include "winwrap/dispatcher.hpp"
 #include "winwrap/error.hpp"
+#include "winwrap/messages.hpp"
 
 namespace winwrap {
 
@@ -39,7 +41,9 @@ struct WindowConfig {
 ///            `static constexpr const wchar_t* window_class_name` and be
 ///            default-constructible.
 template <typename T>
-class Window {
+class Window : public Dispatcher<T, Paintable, MouseInput, KeyboardInput, FocusAware> {
+    using messages = Dispatcher<T, Paintable, MouseInput, KeyboardInput, FocusAware>;
+
 public:
     Window(const Window&) = delete;
     Window& operator=(const Window&) = delete;
@@ -74,13 +78,17 @@ public:
     ///   - `on_create()`            -- WM_CREATE
     ///   - `on_close()`             -- WM_CLOSE
     ///   - `on_destroy()`           -- WM_DESTROY
-    ///   - `on_paint()`             -- WM_PAINT
     ///   - `on_size(w, h)`          -- WM_SIZE (client width/height)
     ///   - `on_command(id)`         -- WM_COMMAND (menu / control id)
+    ///
+    /// Paint, mouse, keyboard, and focus hooks come from the composable message
+    /// traits in <winwrap/messages.hpp>, which this base mixes in.
     ///
     /// For a message with a runtime id (e.g. a tray callback), shadow this whole
     /// function in T instead and delegate the rest with `Window::handle_message`.
     LRESULT handle_message(UINT msg, WPARAM wparam, LPARAM lparam) {
+        if (auto r = messages::dispatch(msg, wparam, lparam))
+            return *r;
         [[maybe_unused]] T* self = static_cast<T*>(this);
         switch (msg) {
             case WM_CREATE:
@@ -98,12 +106,6 @@ public:
             case WM_DESTROY:
                 if constexpr (requires { self->on_destroy(); }) {
                     self->on_destroy();
-                    return 0;
-                } else
-                    break;
-            case WM_PAINT:
-                if constexpr (requires { self->on_paint(); }) {
-                    self->on_paint();
                     return 0;
                 } else
                     break;
