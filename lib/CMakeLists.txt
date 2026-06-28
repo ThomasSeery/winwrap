@@ -20,6 +20,8 @@ target_link_libraries(winwrap
     PUBLIC
         user32
         shell32
+        comctl32
+        gdi32
         $<BUILD_INTERFACE:WIL::WIL>
     PRIVATE
         $<BUILD_INTERFACE:winwrap_warnings>

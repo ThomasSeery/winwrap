@@ -8,7 +8,8 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(Catch2)
 
 add_executable(winwrap_test
-    window_test.cpp)
+    window_test.cpp
+    control_test.cpp)
 
 target_link_libraries(winwrap_test
     PRIVATE
