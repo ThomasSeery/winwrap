@@ -1,6 +1,10 @@
 # Win32-specific carve-outs (pragma-once is the house style; see CODE_CONVENTIONS):
 #  reinterpret-cast / no-int-to-ptr are inherent to native Win32 -- HWND<->object
 #  round-trips via GWLP_USERDATA + CREATESTRUCT, and the (HBRUSH)(COLOR_x+1) idiom.
+#  pro-type-union-access -- SDK structs use anonymous unions we must write
+#  (NOTIFYICONDATAW's uVersion/uTimeout for NIM_SETVERSION).
+#  easily-swappable-parameters -- Win32 surfaces pass adjacent same-typed scalars
+#  pervasively (message ids, handles, coords); fires across every wrapper.
 Checks: >
   -*,
   bugprone-*,
@@ -16,7 +20,9 @@ Checks: >
   -readability-braces-around-statements,
   -portability-avoid-pragma-once,
   -cppcoreguidelines-pro-type-reinterpret-cast,
-  -performance-no-int-to-ptr
+  -performance-no-int-to-ptr,
+  -cppcoreguidelines-pro-type-union-access,
+  -bugprone-easily-swappable-parameters
 WarningsAsErrors: ''
 HeaderFilterRegex: 'lib/.*'
 CheckOptions:

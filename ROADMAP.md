@@ -15,9 +15,9 @@ composing through the `on_*` hooks. Design is locked (see *Decisions locked* →
    `newcpp -Windows`), *not* an `examples/` subdir; it pulls winwrap's headers via a
    local include path (`Window` is header-only). Currently uncommitted (throwaway).
 2. ~~Task 2 — `Menu`~~ — ✅ **Done** (see Task 2 below).
-3. **Task 3 — `NotifyIcon`** (spec below) — the tray icon. ← **START HERE**
+3. ~~Task 3 — `NotifyIcon`~~ — ✅ **Done** (implemented; not yet exercised — see Task 3).
 4. **`tray_app`** (standalone, like hello-window) — window + tray + menu
-   end-to-end. The wifi-toggle shape minus the wifi logic.
+   end-to-end. The wifi-toggle shape minus the wifi logic. ← **START HERE**
 5. **Wire into wifi-toggle** — swap its hand-rolled Win32 for winwrap.
 6. **Tag `v0.1`** — so wifi-toggle pins a tag (no surprise BC).
 
@@ -32,7 +32,12 @@ composing through the `on_*` hooks. Design is locked (see *Decisions locked* →
   `std::expected<Menu, std::error_code>`; `add_item` / `show` / `handle()`; owns its
   `HMENU` via `wil::unique_hmenu` (move-only). `show` posts `WM_COMMAND` → owner's
   `on_command`. Builds clean, clang-tidy-clean.
-- **`NotifyIcon`** — header is an empty namespace. Not started. ← **Task 3**
+- **`NotifyIcon`** — ✅ **Done.** Move-only RAII wrapper over `Shell_NotifyIcon`,
+  targeting `NOTIFYICON_VERSION_4`. `create(NotifyIconConfig)` → `std::expected`;
+  `add()` (initial add + `WM_TASKBARCREATED` re-add), `set_tooltip`, static
+  `taskbar_created_message()`; owns `HICON` via `wil::unique_hicon`; `NIM_DELETE` on
+  destruct; hand-written Rule-of-Five (the shell registration isn't an RAII handle).
+  Builds clean (`/W4` + sanitizers), clang-tidy-clean. **Not yet exercised** by an app.
 - **`error.hpp`** — `last_error()` lives in `winwrap/error.hpp` (shared by
   `window.hpp` and `menu.cpp`).
 - **Build** — CMake + WIL + install/export + warnings/sanitizers. Solid; no work
@@ -44,6 +49,10 @@ composing through the `on_*` hooks. Design is locked (see *Decisions locked* →
   reuse rule.)
 - **Window config via a `WindowConfig` struct** + C++20 designated initializers —
   not a builder, not static traits. Drops the variadic/forwarding from `create()`.
+- **Config-struct factories (generalised):** any public factory with multiple args
+  (or any two same-typed args) takes a `*Config` struct + designated initializers —
+  `NotifyIconConfig` joins `WindowConfig`. Codified in `CODE_CONVENTIONS.md` (winwrap);
+  the struct-doc style lives in `cpp/CODE_CONVENTIONS.md` (all projects).
 - **Errors as `std::expected<T, std::error_code>`** at the public API; Win32 codes
   via `std::system_category()`. WIL stays for RAII handles only, not control flow.
 - **Message dispatch via named `on_*` hooks** (evolved this session). `Window`'s
@@ -63,6 +72,9 @@ composing through the `on_*` hooks. Design is locked (see *Decisions locked* →
   disables `convert-member-functions-to-static` (the `on_*` hooks are instance
   methods by contract) and `named-parameter` (unused Win32 callback / entry-point
   params stay unnamed, else MSVC `/W4 C4100` fires). All propagated to `newcpp.ps1`.
+  winwrap's `.clang-tidy` further disables `pro-type-union-access` (SDK anonymous
+  unions, e.g. `NOTIFYICONDATAW.uVersion`) and `easily-swappable-parameters` (Win32
+  passes adjacent same-typed scalars pervasively) — candidates to propagate.
   **Lint triage policy** (in `CODE_CONVENTIONS.md`): the compiler is the source of
   truth — suppress a check if it's wrong/inapplicable (with a comment why), else fix
   the code.
@@ -123,7 +135,22 @@ Delivered in `lib/include/winwrap/menu.hpp` + `lib/src/menu.cpp`:
 Builds clean, clang-tidy-clean. **Not yet exercised** by an example — wire a `Menu`
 into a window (right-click → `show()` → `on_command`); the tray app will cover it.
 
-## Task 3 — `NotifyIcon`: the differentiator
+## Task 3 — `NotifyIcon`: the differentiator — ✅ DONE
+
+Delivered in `lib/include/winwrap/notify_icon.hpp` + `lib/src/notify_icon.cpp`:
+- **`class NotifyIcon final`** — move-only; **hand-written Rule-of-Five** (the shell
+  registration is keyed by `(hWnd, uID)`, not an RAII handle — moves neuter the
+  source, the destructor runs `NIM_DELETE`). Owns the `HICON` via `wil::unique_hicon`.
+- **`create(const NotifyIconConfig&)`** → `std::expected`; constructs then `add()`s,
+  with RAII cleanup if `NIM_SETVERSION` fails after `NIM_ADD`.
+- **`add()`** — `NIM_ADD` + `NIM_SETVERSION` (→ `NOTIFYICON_VERSION_4`); reused for the
+  `WM_TASKBARCREATED` re-add. **`set_tooltip`** → `NIM_MODIFY`. Static
+  **`taskbar_created_message()`** → `RegisterWindowMessageW`.
+- **`NotifyIconConfig`** struct + designated initializers (kills swappable
+  same-typed params; mirrors `WindowConfig`).
+- Builds clean (`/W4` + sanitizers), clang-tidy-clean.
+- **Not yet exercised** — `tray_app` will wire it into a window's `handle_message`
+  (decode the v4 event from `LOWORD(lParam)`) + a `Menu`.
 
 **LOCKED design:** attaches to a `Window<T>` (takes its `HWND` + callback message
 id); lives as a member of the derived window, created in `on_created()`; targets
