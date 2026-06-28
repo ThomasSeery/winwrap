@@ -5,29 +5,36 @@ What's done, what's next, and the spec for each piece. Design rationale lives in
 
 ## ▶ Next session: start here
 
-**Goal: an MVP usable in wifi-toggle** = `Window` (done) + `Menu` + `NotifyIcon`,
-composing through `handle_message`. Design is locked (see *Decisions locked* →
+**Goal: an MVP usable in wifi-toggle** = `Window` ✓ + `Menu` ✓ + `NotifyIcon`,
+composing through the `on_*` hooks. Design is locked (see *Decisions locked* →
 *Tray / menu integration*) — don't re-litigate; build straight against it.
 
-1. **`examples/hello_window`** — `MainWindow : public Window<MainWindow>` +
-   `WinMain` + message loop. Proves `Window<T>` runs; introduces `GetMessage` /
-   `TranslateMessage` / `DispatchMessage` (the part `create()` doesn't own).
-2. **Task 2 — `Menu`** (spec below).
-3. **Task 3 — `NotifyIcon`** (spec below) — the tray icon.
-4. **`examples/tray_app`** — window + tray + menu end-to-end. The wifi-toggle shape
-   minus the wifi logic; proves the whole MVP before betting wifi-toggle on it.
+1. ~~`hello-window` example~~ — ✅ **Done & runs on screen.**
+   `MainWindow : public Window<MainWindow>` + `wWinMain` + message loop. It's a
+   **standalone project** at `cpp/windows/hello-window` (scaffolded with
+   `newcpp -Windows`), *not* an `examples/` subdir; it pulls winwrap's headers via a
+   local include path (`Window` is header-only). Currently uncommitted (throwaway).
+2. ~~Task 2 — `Menu`~~ — ✅ **Done** (see Task 2 below).
+3. **Task 3 — `NotifyIcon`** (spec below) — the tray icon. ← **START HERE**
+4. **`tray_app`** (standalone, like hello-window) — window + tray + menu
+   end-to-end. The wifi-toggle shape minus the wifi logic.
 5. **Wire into wifi-toggle** — swap its hand-rolled Win32 for winwrap.
 6. **Tag `v0.1`** — so wifi-toggle pins a tag (no surprise BC).
 
 ## Current state (v0.1)
 
-- **`Window<T>`** — ✅ **Done.** Configurable `create(WindowConfig)`, two-layer
-  registration/creation, `std::expected` error model, `configure_class` hook, and
-  the `WM_NCDESTROY` lifetime fix. Builds clean (MSVC `/W4`), clang-tidy-clean,
-  public API documented with Doxygen `///`. *Not yet exercised by a running app.*
-- **`Menu`** — declares `add_item` / `show`, owns its `HMENU` via
-  `wil::unique_hmenu`. Methods not yet implemented (`menu.cpp` is empty). ← **Task 2**
+- **`Window<T>`** — ✅ **Done & exercised.** Configurable `create(WindowConfig)`,
+  two-layer registration/creation, `std::expected` error model, `configure_class`
+  hook, `WM_NCDESTROY` lifetime fix, a **`show(cmd)`** convenience, and **compile-time
+  `on_*` message hooks** (see *Decisions locked → Message dispatch*). Runs on screen
+  via `hello-window`. Builds clean (MSVC `/W4`), clang-tidy-clean, Doxygen-documented.
+- **`Menu`** — ✅ **Done.** `class Menu final`; `create()` factory →
+  `std::expected<Menu, std::error_code>`; `add_item` / `show` / `handle()`; owns its
+  `HMENU` via `wil::unique_hmenu` (move-only). `show` posts `WM_COMMAND` → owner's
+  `on_command`. Builds clean, clang-tidy-clean.
 - **`NotifyIcon`** — header is an empty namespace. Not started. ← **Task 3**
+- **`error.hpp`** — `last_error()` lives in `winwrap/error.hpp` (shared by
+  `window.hpp` and `menu.cpp`).
 - **Build** — CMake + WIL + install/export + warnings/sanitizers. Solid; no work
   needed.
 
@@ -39,14 +46,26 @@ composing through `handle_message`. Design is locked (see *Decisions locked* →
   not a builder, not static traits. Drops the variadic/forwarding from `create()`.
 - **Errors as `std::expected<T, std::error_code>`** at the public API; Win32 codes
   via `std::system_category()`. WIL stays for RAII handles only, not control flow.
+- **Message dispatch via named `on_*` hooks** (evolved this session). `Window`'s
+  `handle_message` is now a **compile-time dispatcher**: for each well-known message
+  it does `if constexpr (requires { self->on_x(); })` and calls the derived hook if
+  present — `on_create` / `on_close` / `on_destroy` / `on_paint` / `on_size(w,h)` /
+  `on_command(id)` — else `DefWindowProcW`. No vtables. Derived windows define the
+  **public** `on_*` they need instead of writing a `switch`. `handle_message` stays
+  **shadowable** as the escape hatch for runtime-id messages (e.g. the tray
+  callback) — delegate the rest with `Window::handle_message`.
 - **Class-level config** (the `WNDCLASS`) is customized by a `configure_class`
-  hook the derived type shadows — same mechanism as `handle_message`.
+  hook the derived type shadows — same CRTP mechanism as the `on_*` dispatch.
 - **Doc comments:** Doxygen `///` + `@`-commands on the **public API** only;
   one-line `if` bodies drop braces. (Both codified in `CODE_CONVENTIONS.md`.)
 - **Lint carve-outs** (`.clang-tidy`): `#pragma once` allowed; `reinterpret-cast`
-  and `int-to-ptr` allowed (inherent to native Win32). Propagated to the
-  `newcpp.ps1` scaffold — pragma-once in the base template, the Win32 casts in the
-  `-Windows` variant.
+  and `int-to-ptr` allowed (inherent to native Win32). The `-Windows` variant also
+  disables `convert-member-functions-to-static` (the `on_*` hooks are instance
+  methods by contract) and `named-parameter` (unused Win32 callback / entry-point
+  params stay unnamed, else MSVC `/W4 C4100` fires). All propagated to `newcpp.ps1`.
+  **Lint triage policy** (in `CODE_CONVENTIONS.md`): the compiler is the source of
+  truth — suppress a check if it's wrong/inapplicable (with a comment why), else fix
+  the code.
 
 ### Tray / menu integration (locked Stage-0, governs Tasks 2–3)
 
@@ -55,8 +74,9 @@ composing through `handle_message`. Design is locked (see *Decisions locked* →
   `handle_message`. *Not* a self-contained callback object — one event path, no
   parallel `std::function` layer. A `TrayApp` convenience bundle can be added later,
   additively.
-- **Menu routing:** `Menu::show` posts **`WM_COMMAND` to the owner window**, handled
-  in `handle_message` — not `TPM_RETURNCMD`. All events on one path.
+- **Menu routing:** `Menu::show` posts **`WM_COMMAND` to the owner window**,
+  delivered to the owner's **`on_command(id)`** hook (via the `handle_message`
+  dispatcher) — not `TPM_RETURNCMD`. All events on one path.
 - **Tray events exposed raw** (you `switch` on the callback message in
   `handle_message`) for the MVP. A typed `TrayEvent` enum is a future *additive*
   layer, not a v1 requirement.
@@ -86,17 +106,22 @@ clang-tidy-clean, Doxygen-documented.
 app — `examples/hello_window` (see *Next session*). The window code is finished;
 it just hasn't been shown on screen yet.
 
-## Task 2 — `Menu`: implement it
+## Task 2 — `Menu` — ✅ DONE
 
-1. **`add_item(UINT id, const wchar_t* text)`** → `AppendMenuW(handle_.get(), MF_STRING, id, text)`.
-2. **`show(HWND owner)`** → `TrackPopupMenuEx`, with the `SetForegroundWindow(owner)`
-   gotcha (so the menu dismisses on click-away).
-3. **Click routing — LOCKED:** `show` posts **`WM_COMMAND` to the owner**, routed
-   through `handle_message` (not `TPM_RETURNCMD`). Keeps all events on one path.
-4. Mirror the **factory pattern** if construction can fail: `CreatePopupMenu`
-   returning null in the constructor can't surface as `expected`, so consider a
-   static `Menu::create() -> std::expected<Menu, std::error_code>` and a private
-   ctor.
+Delivered in `lib/include/winwrap/menu.hpp` + `lib/src/menu.cpp`:
+- **`class Menu final`** — sealed, move-only (owns `HMENU` via `wil::unique_hmenu`).
+- **`create()`** — static factory → `std::expected<Menu, std::error_code>`, wraps
+  `CreatePopupMenu` (null → `last_error()`); private ctor adopts the handle.
+- **`add_item(UINT id, const wchar_t* text)`** → `AppendMenuW(..., MF_STRING, ...)`,
+  returns `std::expected<void, std::error_code>`.
+- **`show(HWND owner)`** → `SetForegroundWindow` + `GetCursorPos` +
+  `TrackPopupMenuEx` (no `TPM_RETURNCMD`) + `PostMessageW(owner, WM_NULL, 0, 0)`
+  (both `TrackPopupMenu` gotchas).
+- **`handle()`** — non-owning `HMENU` accessor (escape hatch).
+- **Click routing (LOCKED):** `show` posts `WM_COMMAND` → owner's `on_command(id)`.
+
+Builds clean, clang-tidy-clean. **Not yet exercised** by an example — wire a `Menu`
+into a window (right-click → `show()` → `on_command`); the tray app will cover it.
 
 ## Task 3 — `NotifyIcon`: the differentiator
 
@@ -116,14 +141,50 @@ id); lives as a member of the derived window, created in `on_created()`; targets
 
 ---
 
-## Backlog (future)
+## Post-v0.1 roadmap
 
-- **C++17 backport** via preprocessor feature-gating + `nonstd::expected`. Keep
-  the API backport-friendly meanwhile.
-- Balloon / toast notifications.
-- A typed `TrayEvent` enum over the raw tray callback message (additive).
-- A `TrayApp` convenience bundle (message-only window + `NotifyIcon`), additive.
-- A ctor-arg-forwarding `create` overload (once `std::forward` is on the menu).
-- More RAII-wrapped Win32 objects as real projects need them.
-- Child windows / control wrappers (only if a real use case demands it).
+Once v0.1 ships (Window + Menu + NotifyIcon + a `tray_app`, wired into wifi-toggle
+and tagged), here's the planned order. **None of this blocks v0.1.**
+
+### v0.2 — Controls (ergonomic native-control wrappers)
+
+The headline post-MVP feature: make native Win32 controls read naturally —
+`button.on_click([]{ … })` instead of magic-id `WM_COMMAND` switches. A control is
+just a `WS_CHILD` window of an OS class (`"BUTTON"`, `"EDIT"`, …) — Windows supplies
+the widget, winwrap supplies the ergonomics. Phased:
+
+1. **Plumbing first.** Control-id allocation + a parent-side router that maps
+   `WM_COMMAND(id)` (and later `WM_NOTIFY`) to a per-control `std::function`
+   callback. This is a deliberate **runtime callback layer**, distinct from the
+   window's zero-overhead `on_*` hooks — two dispatch models, on purpose.
+2. **`Button` first** — thin shell over a `"BUTTON"` child: `Button::create(parent,
+   text, rect)`, `on_click(handler)`, `set_text` / `enable`. Proves the pattern +
+   the callback layer end-to-end in a small app.
+3. **Expand on demand** — `Edit` (text field), `Checkbox`, `Label` (`"STATIC"`),
+   then `ComboBox` / `ListBox` as real apps actually need them. No speculative wraps.
+4. **Extract a `Control` base only after 2–3 exist** (rule of three) — fold the
+   shared create / id / HWND / positioning in then, not up front.
+
+Open questions to settle at the start: id allocation (auto-counter vs user-supplied);
+where the `WM_COMMAND`→callback router lives (likely a registry on `Window<T>`, under
+`on_command`); control lifetime (child windows die with the parent — RAII or just
+hold the `HWND`?); `Control` base vs per-control `final` classes.
+
+**Hard boundary (unchanged):** native controls made pleasant *only* — no layout
+engine, no theming, no custom-drawn widgets. Not a Qt/wxWidgets replacement.
+
+### v0.3 / ongoing — convenience & reach
+
+- **`TrayApp`** convenience bundle (message-only window + `NotifyIcon`), additive.
+- **Balloon / toast notifications** over `NotifyIcon`.
+- A typed **`TrayEvent`** enum over the raw tray callback message (additive).
+- A **ctor-arg-forwarding `create`** overload (once `std::forward` is taught).
+- More **RAII-wrapped Win32 objects** as real projects need them.
+- **Catch2 tests** that exercise behaviour without a live message pump.
+
+### Later
+
+- **C++17 backport** via preprocessor feature-gating + `nonstd::expected`
+  (expected-lite) where `std::expected` is absent. Keep the API backport-friendly
+  meanwhile.
 - Catch2 tests that exercise behaviour without a live message pump.

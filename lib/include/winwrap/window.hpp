@@ -12,13 +12,9 @@
 #include <memory>
 #include <system_error>
 
-namespace winwrap {
+#include "winwrap/error.hpp"
 
-/// The most recent Win32 error (GetLastError) as a std::error_code -- the
-/// std-native carrier for a Win32 failure.
-inline std::error_code last_error() {
-    return std::error_code{static_cast<int>(GetLastError()), std::system_category()};
-}
+namespace winwrap {
 
 /// Per-window settings passed to Window::create -- the CreateWindowExW arguments.
 /// Omitted fields take the defaults below. The default style is not visible: OR in
@@ -69,7 +65,7 @@ public:
 
     /// Shows the window (or applies another ShowWindow command).
     /// @param cmd  A ShowWindow command; defaults to SW_SHOW. Pass wWinMain's
-    ///             nCmdShow on first display to honour how the app was launched.
+    ///             nShowCmd on first display to honour how the app was launched.
     void show(int cmd = SW_SHOW) { ShowWindow(hwnd_, cmd); }
 
     /// Routes a message to the matching `on_*` hook the derived window defines,

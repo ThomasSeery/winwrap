@@ -17,8 +17,9 @@ the way Qt / wxWidgets / GTK do.
    you can always drop to plain Win32. winwrap adds ergonomics; it never hides
    the platform or locks you in.
 2. **Zero-overhead dispatch via CRTP.** Window message routing resolves at
-   compile time (`static_cast<T*>` + method shadowing) — no vtables, no virtual
-   hierarchy, no macro message maps.
+   compile time — `static_cast<T*>` + `if constexpr`/`requires` detection of named
+   `on_*` hooks the derived window defines — no vtables, no virtual hierarchy, no
+   macro message maps. You write only the `on_*` handlers you need.
 3. **Low / zero dependencies.** Header-only WIL for RAII handles, and nothing
    else. No multi-megabyte runtime to ship next to a tray utility.
 4. **RAII over every resource.** Handles are owned by wrappers — WIL's
@@ -37,8 +38,12 @@ the way Qt / wxWidgets / GTK do.
 
 ## What winwrap is *not* (non-goals)
 
-- **Not a GUI toolkit.** No widget tree, no layout engine, no theming system.
-  It wraps windows and shell integration, not a control library.
+- **Not a from-scratch GUI toolkit.** No custom widget tree, no layout engine, no
+  theming / custom-drawn widgets. *Ergonomic wrappers over **native** Win32 controls*
+  (`Button`, `Edit`, …) are in scope from v0.2 — but they stay **thin shells over the
+  OS controls**: winwrap supplies the ergonomics (`button.on_click(...)`), Windows
+  supplies the widget. The line is "native controls made pleasant," never a
+  Qt/wxWidgets replacement.
 - **Not Qt / wxWidgets / GTK.** No replacement runtime, no event system of its
   own, no cross-platform abstraction.
 - **Not cross-platform.** Windows only, on purpose.
@@ -88,4 +93,6 @@ The principle that decides build-vs-adopt for every piece:
   (expected-lite) where `std::expected` is absent. Deliberately deferred.
 - More RAII-wrapped Win32 objects as the need recurs across real projects.
 - Balloon / toast notifications, `NOTIFYICON_VERSION_4` message protocol.
-- Child windows / control wrappers, if a real project demands them.
+- **Ergonomic native-control wrappers** (`Button`, `Edit`, …) — v0.2: thin shells
+  over the OS control classes with on-event callbacks (`button.on_click(...)`),
+  hiding the `WM_COMMAND`-id plumbing. Native controls only — no layout/theming.
