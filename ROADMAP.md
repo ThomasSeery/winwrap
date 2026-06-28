@@ -59,12 +59,18 @@ composing through the `on_*` hooks. Design is locked (see *Decisions locked* →
   the struct-doc style lives in `cpp/CODE_CONVENTIONS.md` (all projects).
 - **Errors as `std::expected<T, std::error_code>`** at the public API; Win32 codes
   via `std::system_category()`. WIL stays for RAII handles only, not control flow.
-- **Message dispatch via named `on_*` hooks** (evolved this session). `Window`'s
-  `handle_message` is now a **compile-time dispatcher**: for each well-known message
-  it does `if constexpr (requires { self->on_x(); })` and calls the derived hook if
-  present — `on_create` / `on_close` / `on_destroy` / `on_paint` / `on_size(w,h)` /
-  `on_command(id)` — else `DefWindowProcW`. No vtables. Derived windows define the
-  **public** `on_*` they need instead of writing a `switch`. `handle_message` stays
+- **Message dispatch via composable CRTP traits** (`messages.hpp` + `dispatcher.hpp`).
+  Seven empty-base traits — `Lifecycle`, `Sizable`, `Commandable`, `Paintable`,
+  `MouseInput`, `KeyboardInput`, `FocusAware` — each expose
+  `std::optional<LRESULT> dispatch(UINT, WPARAM, LPARAM)`: engaged = handled,
+  `nullopt` = pass on. `Dispatcher<T, Traits...>` chains them via a fold expression
+  (`||`), short-circuiting on first match. Both `Window<T>` and `Control<T>` inherit
+  via `Dispatcher`; their `handle_message` is now pure — `messages::dispatch(...)`
+  then `Def*Proc`. The `WW_CASE(message, call)` macro (defined + `#undef`'d inside
+  `messages.hpp`) is the only tool that can simultaneously put a maybe-absent member
+  into an unevaluated `requires` and `return`/`break` from the caller's frame — one
+  line per case, zero duplication. No vtables; all resolved at compile time. Derived
+  types define only the **public** `on_*` hooks they need. `handle_message` stays
   **shadowable** as the escape hatch for runtime-id messages (e.g. the tray
   callback) — delegate the rest with `Window::handle_message`.
 - **Class-level config** (the `WNDCLASS`) is customized by a `configure_class`

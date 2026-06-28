@@ -18,31 +18,39 @@ namespace winwrap {
 /// compile-time `on_*` hooks the final type defines. Each trait's `dispatch`
 /// returns an engaged optional (the LRESULT) when it handled the message, or
 /// `std::nullopt` to let the caller keep looking -- first match wins, so no
-/// message may appear in two traits. Hooks are detected with
-/// `if constexpr (requires { ... })`, so define only the ones you need, as public
-/// members; the rest cost nothing. Each trait is empty, so mixing them in adds no
-/// size (empty-base optimization) and no virtual dispatch.
+/// message may appear in two traits. Each trait is empty, so mixing them in adds
+/// no size (empty-base optimization) and no virtual dispatch.
 ///
-/// A wrapper can chain traits by hand at the top of its `handle_message`:
-///
-///   if (auto r = Paintable<T>::dispatch(msg, wparam, lparam)) return *r;
-///
-/// or compose several at once with winwrap::Dispatcher (see
+/// A wrapper can chain traits by hand at the top of its `handle_message`, or
+/// compose several at once with winwrap::Dispatcher (see
 /// <winwrap/dispatcher.hpp>).
 ///
 /// @tparam Derived  The final user type (e.g. MyButton), threaded through the
 ///                  wrapper so the trait sees its hooks.
+
+/// One dispatch case: call the hook iff `Derived` defines it -- existence is
+/// detected in an unevaluated `requires` and resolved by `if constexpr`, so the
+/// missing-hook branch emits no code (zero runtime cost). Deriving the `requires`
+/// check from the same `call` makes the two impossible to drift apart.
+/// Header-local; #undef'd at the end so it never leaks to includers.
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+#define WW_CASE(message, call)              \
+    case message:                           \
+        if constexpr (requires { call; }) { \
+            call;                           \
+            return 0;                       \
+        } else                              \
+            break
 
 /// Routes WM_PAINT to `Derived::on_paint()` when defined.
 template <typename Derived>
 struct Paintable {
     std::optional<LRESULT> dispatch(UINT msg, WPARAM, LPARAM) {
         [[maybe_unused]] auto* self = static_cast<Derived*>(this);
-        if (msg == WM_PAINT) {
-            if constexpr (requires { self->on_paint(); }) {
-                self->on_paint();
-                return 0;
-            }
+        switch (msg) {
+            WW_CASE(WM_PAINT, self->on_paint());
+            default:
+                break;
         }
         return std::nullopt;
     }
@@ -55,24 +63,10 @@ struct MouseInput {
     std::optional<LRESULT> dispatch(UINT msg, WPARAM, LPARAM lparam) {
         [[maybe_unused]] auto* self = static_cast<Derived*>(this);
         switch (msg) {
-            case WM_MOUSEMOVE:
-                if constexpr (requires { self->on_mouse_move(0, 0); }) {
-                    self->on_mouse_move(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
-                    return 0;
-                } else
-                    break;
-            case WM_LBUTTONDOWN:
-                if constexpr (requires { self->on_lbutton_down(0, 0); }) {
-                    self->on_lbutton_down(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
-                    return 0;
-                } else
-                    break;
-            case WM_LBUTTONUP:
-                if constexpr (requires { self->on_lbutton_up(0, 0); }) {
-                    self->on_lbutton_up(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
-                    return 0;
-                } else
-                    break;
+            WW_CASE(WM_MOUSEMOVE, self->on_mouse_move(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)));
+            WW_CASE(WM_LBUTTONDOWN,
+                    self->on_lbutton_down(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)));
+            WW_CASE(WM_LBUTTONUP, self->on_lbutton_up(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)));
             default:
                 break;
         }
@@ -86,12 +80,7 @@ struct KeyboardInput {
     std::optional<LRESULT> dispatch(UINT msg, WPARAM wparam, LPARAM) {
         [[maybe_unused]] auto* self = static_cast<Derived*>(this);
         switch (msg) {
-            case WM_KEYDOWN:
-                if constexpr (requires { self->on_key_down(0); }) {
-                    self->on_key_down(static_cast<WORD>(wparam));
-                    return 0;
-                } else
-                    break;
+            WW_CASE(WM_KEYDOWN, self->on_key_down(static_cast<WORD>(wparam)));
             default:
                 break;
         }
@@ -106,18 +95,8 @@ struct FocusAware {
     std::optional<LRESULT> dispatch(UINT msg, WPARAM, LPARAM) {
         [[maybe_unused]] auto* self = static_cast<Derived*>(this);
         switch (msg) {
-            case WM_SETFOCUS:
-                if constexpr (requires { self->on_focus(true); }) {
-                    self->on_focus(true);
-                    return 0;
-                } else
-                    break;
-            case WM_KILLFOCUS:
-                if constexpr (requires { self->on_focus(true); }) {
-                    self->on_focus(false);
-                    return 0;
-                } else
-                    break;
+            WW_CASE(WM_SETFOCUS, self->on_focus(true));
+            WW_CASE(WM_KILLFOCUS, self->on_focus(false));
             default:
                 break;
         }
@@ -133,24 +112,9 @@ struct Lifecycle {
     std::optional<LRESULT> dispatch(UINT msg, WPARAM, LPARAM) {
         [[maybe_unused]] auto* self = static_cast<Derived*>(this);
         switch (msg) {
-            case WM_CREATE:
-                if constexpr (requires { self->on_create(); }) {
-                    self->on_create();
-                    return 0;
-                } else
-                    break;
-            case WM_CLOSE:
-                if constexpr (requires { self->on_close(); }) {
-                    self->on_close();
-                    return 0;
-                } else
-                    break;
-            case WM_DESTROY:
-                if constexpr (requires { self->on_destroy(); }) {
-                    self->on_destroy();
-                    return 0;
-                } else
-                    break;
+            WW_CASE(WM_CREATE, self->on_create());
+            WW_CASE(WM_CLOSE, self->on_close());
+            WW_CASE(WM_DESTROY, self->on_destroy());
             default:
                 break;
         }
@@ -163,11 +127,10 @@ template <typename Derived>
 struct Sizable {
     std::optional<LRESULT> dispatch(UINT msg, WPARAM, LPARAM lparam) {
         [[maybe_unused]] auto* self = static_cast<Derived*>(this);
-        if (msg == WM_SIZE) {
-            if constexpr (requires { self->on_size(0U, 0U); }) {
-                self->on_size(LOWORD(lparam), HIWORD(lparam));
-                return 0;
-            }
+        switch (msg) {
+            WW_CASE(WM_SIZE, self->on_size(LOWORD(lparam), HIWORD(lparam)));
+            default:
+                break;
         }
         return std::nullopt;
     }
@@ -179,14 +142,15 @@ template <typename Derived>
 struct Commandable {
     std::optional<LRESULT> dispatch(UINT msg, WPARAM wparam, LPARAM) {
         [[maybe_unused]] auto* self = static_cast<Derived*>(this);
-        if (msg == WM_COMMAND) {
-            if constexpr (requires { self->on_command(0); }) {
-                self->on_command(LOWORD(wparam));
-                return 0;
-            }
+        switch (msg) {
+            WW_CASE(WM_COMMAND, self->on_command(LOWORD(wparam)));
+            default:
+                break;
         }
         return std::nullopt;
     }
 };
+
+#undef WW_CASE
 
 }  // namespace winwrap
