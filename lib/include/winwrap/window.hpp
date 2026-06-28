@@ -16,18 +16,17 @@
 
 namespace winwrap {
 
-/// Per-window settings passed to Window::create -- the CreateWindowExW arguments.
-/// Omitted fields take the defaults below. The default style is not visible: OR in
-/// WS_VISIBLE, or call ShowWindow after create, to show the window.
+/// Per-window settings passed to Window::create -- the CreateWindowExW arguments;
+/// omitted fields take the defaults below.
 struct WindowConfig {
-    const wchar_t* title{L""};
-    DWORD style{WS_OVERLAPPEDWINDOW};
-    DWORD ex_style{0};
-    int x{CW_USEDEFAULT};
-    int y{CW_USEDEFAULT};
-    int width{CW_USEDEFAULT};
-    int height{CW_USEDEFAULT};
-    HWND parent{nullptr};
+    const wchar_t* title{L""};         ///< Window title-bar text.
+    DWORD style{WS_OVERLAPPEDWINDOW};  ///< Window styles; the default is not visible -- OR in WS_VISIBLE, or call show().
+    DWORD ex_style{0};                 ///< Extended (WS_EX_*) styles.
+    int x{CW_USEDEFAULT};              ///< Left edge in pixels; CW_USEDEFAULT lets Windows place it.
+    int y{CW_USEDEFAULT};              ///< Top edge in pixels; CW_USEDEFAULT lets Windows place it.
+    int width{CW_USEDEFAULT};          ///< Width in pixels; CW_USEDEFAULT lets Windows size it.
+    int height{CW_USEDEFAULT};         ///< Height in pixels; CW_USEDEFAULT lets Windows size it.
+    HWND parent{nullptr};              ///< Owner/parent window; null for a top-level window.
 };
 
 /// CRTP base for a top-level window. Derive as

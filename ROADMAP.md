@@ -9,6 +9,10 @@ What's done, what's next, and the spec for each piece. Design rationale lives in
 composing through the `on_*` hooks. Design is locked (see *Decisions locked* →
 *Tray / menu integration*) — don't re-litigate; build straight against it.
 
+> **v0.2 `Control<T>` is ✅ done** — implemented + MSVC-verified (compiles + links via
+> `control_test`; see [CONTROL_PLAN.md](CONTROL_PLAN.md)), though not yet exercised on
+> screen (§8). Next: a control-on-screen exercise app, then the v0.1 app track below.
+
 1. ~~`hello-window` example~~ — ✅ **Done & runs on screen.**
    `MainWindow : public Window<MainWindow>` + `wWinMain` + message loop. It's a
    **standalone project** at `cpp/windows/hello-window` (scaffolded with
@@ -17,7 +21,7 @@ composing through the `on_*` hooks. Design is locked (see *Decisions locked* →
 2. ~~Task 2 — `Menu`~~ — ✅ **Done** (see Task 2 below).
 3. ~~Task 3 — `NotifyIcon`~~ — ✅ **Done** (implemented; not yet exercised — see Task 3).
 4. **`tray_app`** (standalone, like hello-window) — window + tray + menu
-   end-to-end. The wifi-toggle shape minus the wifi logic. ← **START HERE**
+   end-to-end. The wifi-toggle shape minus the wifi logic. ← **next in the v0.1 track** (after v0.2 Controls)
 5. **Wire into wifi-toggle** — swap its hand-rolled Win32 for winwrap.
 6. **Tag `v0.1`** — so wifi-toggle pins a tag (no surprise BC).
 
@@ -173,32 +177,50 @@ id); lives as a member of the derived window, created in `on_created()`; targets
 Once v0.1 ships (Window + Menu + NotifyIcon + a `tray_app`, wired into wifi-toggle
 and tagged), here's the planned order. **None of this blocks v0.1.**
 
-### v0.2 — Controls (ergonomic native-control wrappers)
+### v0.2 — Controls (`Control<T>` — the CRTP control base)
 
-The headline post-MVP feature: make native Win32 controls read naturally —
-`button.on_click([]{ … })` instead of magic-id `WM_COMMAND` switches. A control is
-just a `WS_CHILD` window of an OS class (`"BUTTON"`, `"EDIT"`, …) — Windows supplies
-the widget, winwrap supplies the ergonomics. Phased:
+Full spec: **[CONTROL_PLAN.md](CONTROL_PLAN.md)** (governs this section).
 
-1. **Plumbing first.** Control-id allocation + a parent-side router that maps
-   `WM_COMMAND(id)` (and later `WM_NOTIFY`) to a per-control `std::function`
-   callback. This is a deliberate **runtime callback layer**, distinct from the
-   window's zero-overhead `on_*` hooks — two dispatch models, on purpose.
-2. **`Button` first** — thin shell over a `"BUTTON"` child: `Button::create(parent,
-   text, rect)`, `on_click(handler)`, `set_text` / `enable`. Proves the pattern +
-   the callback layer end-to-end in a small app.
-3. **Expand on demand** — `Edit` (text field), `Checkbox`, `Label` (`"STATIC"`),
-   then `ComboBox` / `ListBox` as real apps actually need them. No speculative wraps.
-4. **Extract a `Control` base only after 2–3 exist** (rule of three) — fold the
-   shared create / id / HWND / positioning in then, not up front.
+> **✅ `Control<T>` done** (2026-06-28) — implemented + MSVC-verified (compiles + links
+> via `tests/control_test.cpp`). Remaining: exercise it on screen (CONTROL_PLAN §8).
 
-Open questions to settle at the start: id allocation (auto-counter vs user-supplied);
-where the `WM_COMMAND`→callback router lives (likely a registry on `Window<T>`, under
-`on_command`); control lifetime (child windows die with the parent — RAII or just
-hold the `HWND`?); `Control` base vs per-control `final` classes.
+> **Not gated behind v0.1.** Controls is library work, independent of the v0.1 app
+> track (`tray_app` → wifi-toggle → tag): no shared code, nothing extra to link, so
+> it can be built first. Order by priority, not dependency.
 
-**Hard boundary (unchanged):** native controls made pleasant *only* — no layout
-engine, no theming, no custom-drawn widgets. Not a Qt/wxWidgets replacement.
+The headline post-MVP feature: `Control<T>`, a CRTP base for native child controls
+that you **subclass to customise**, mirroring `Window<T>`. A control is just a
+`WS_CHILD` window of an OS class (`"BUTTON"`, `"EDIT"`, …) — Windows supplies the
+widget; `Control<T>` supplies the same compile-time `on_*` dispatch as `Window<T>`.
+
+- **`Control<T>` CRTP base** — derive a control type
+  (`class MyButton : public Control<MyButton>`), shadow compile-time `on_*` hooks
+  (`on_paint`, mouse, key, focus), dispatched via `if constexpr` — the `Window<T>`
+  pattern. The bridge into the system control's message stream is
+  **`SetWindowSubclass`** (the OS owns the control's WndProc); unhandled →
+  `DefSubclassProc`. `this` rides in the subclass `dwRefData`, **not**
+  `GWLP_USERDATA`.
+- **Subclass-to-customise / owner-draw IS the point.** This supersedes the earlier
+  *runtime-callback* design (thin `Button` instances + a `CommandRouter` + a
+  `Window<T>` routing edit) — **rejected**: no `CommandRouter`, no edit to
+  `window.hpp`.
+- **Click semantics:** a control's `BN_CLICKED` still arrives at the **parent** as
+  `WM_COMMAND` → the window's existing `on_command(id)` — handle clicks there,
+  keyed by `id`. `Control<T>` intercepts the control's *own* messages. Click-on-the-
+  control-object (message reflection) is a future *additive* layer.
+- **Lifetime** mirrors `Window<T>`: non-movable, `create()` →
+  `std::expected<std::unique_ptr<T>, std::error_code>`, held as a `unique_ptr`
+  member of the owner window; the parent destroys the child HWND (no
+  `DestroyWindow`); the dtor / `WM_NCDESTROY` just `RemoveWindowSubclass`.
+- **`Control<T>` is the deliverable, not a control catalog.** Apps derive their own
+  control types from it; the library does **not** ship pre-built `Button` / `Edit` /
+  `ComboBox` wrappers (that's the WTL/Win32++ toolkit direction — out of scope).
+  A concrete `final` control enters the library *only reactively* — when the same
+  derive-boilerplate recurs across 2–3 real apps — never as a planned set.
+
+**Hard boundary:** native controls + the subclass building block *only* — no layout
+engine, no theming framework, no widget toolkit. Not a Qt/wxWidgets replacement.
+(Owner-draw via subclassing **is** in scope now — that's the point of `Control<T>`.)
 
 ### v0.3 / ongoing — convenience & reach
 

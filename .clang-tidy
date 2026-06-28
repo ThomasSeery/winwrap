@@ -5,6 +5,8 @@
 #  (NOTIFYICONDATAW's uVersion/uTimeout for NIM_SETVERSION).
 #  easily-swappable-parameters -- Win32 surfaces pass adjacent same-typed scalars
 #  pervasively (message ids, handles, coords); fires across every wrapper.
+#  implicit-bool-conversion -- bool<->BOOL is Win32's boolean (BOOL is just int);
+#  the conversion is safe and intended, and fires on every BOOL-taking Win32 call.
 Checks: >
   -*,
   bugprone-*,
@@ -22,7 +24,8 @@ Checks: >
   -cppcoreguidelines-pro-type-reinterpret-cast,
   -performance-no-int-to-ptr,
   -cppcoreguidelines-pro-type-union-access,
-  -bugprone-easily-swappable-parameters
+  -bugprone-easily-swappable-parameters,
+  -readability-implicit-bool-conversion
 WarningsAsErrors: ''
 HeaderFilterRegex: 'lib/.*'
 CheckOptions:

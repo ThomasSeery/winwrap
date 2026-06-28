@@ -7,5 +7,19 @@ IndentWidth: 4
 AccessModifierOffset: -4
 PointerAlignment: Left
 AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
 SortIncludes: CaseInsensitive
+# <windows.h> must precede other Windows headers (commctrl.h, shellapi.h, ...),
+# which depend on its macros (CALLBACK etc.). Force it first so SortIncludes
+# can't reorder it alphabetically and break the build.
+IncludeCategories:
+  - Regex: '<windows\.h>'
+    Priority: 1
+  - Regex: '<.*\.h>'
+    Priority: 2
+  - Regex: '<.*>'
+    Priority: 3
+  - Regex: '".*"'
+    Priority: 4
 ...

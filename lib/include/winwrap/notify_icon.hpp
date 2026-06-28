@@ -19,17 +19,13 @@
 namespace winwrap {
 
 /// Settings passed to NotifyIcon::create -- the Shell_NotifyIcon parameters, set with
-/// designated initializers (omitted fields take the defaults). `owner` is the window
-/// tray events post to (its handle_message); `callback_msg` is the app message id
-/// they arrive as (use WM_APP + n); `id` identifies this icon within the owner;
-/// `icon` is adopted, so it must be safe to DestroyIcon (not a shared system icon);
-/// `tooltip` is truncated past 127 chars.
+/// designated initializers; omitted fields take the defaults.
 struct NotifyIconConfig {
-    HWND owner{};
-    UINT callback_msg{};
-    UINT id{};
-    HICON icon{};
-    const wchar_t* tooltip{L""};
+    HWND owner{};                ///< Window tray events post to (its handle_message).
+    UINT callback_msg{};         ///< App message id the events arrive as; use WM_APP + n.
+    UINT id{};                   ///< Identifies this icon within the owner.
+    HICON icon{};                ///< Adopted -- must be safe to DestroyIcon (not a shared system icon).
+    const wchar_t* tooltip{L""}; ///< Hover text; truncated past 127 chars.
 };
 
 /// A system-tray (notification-area) icon. Owns its HICON and its shell
