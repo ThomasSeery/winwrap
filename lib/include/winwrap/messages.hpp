@@ -125,4 +125,68 @@ struct FocusAware {
     }
 };
 
+/// Routes the window lifecycle messages to `on_create` / `on_close` /
+/// `on_destroy`. (Top-level windows only -- a subclassed control is attached
+/// after WM_CREATE has already fired.)
+template <typename Derived>
+struct Lifecycle {
+    std::optional<LRESULT> dispatch(UINT msg, WPARAM, LPARAM) {
+        [[maybe_unused]] auto* self = static_cast<Derived*>(this);
+        switch (msg) {
+            case WM_CREATE:
+                if constexpr (requires { self->on_create(); }) {
+                    self->on_create();
+                    return 0;
+                } else
+                    break;
+            case WM_CLOSE:
+                if constexpr (requires { self->on_close(); }) {
+                    self->on_close();
+                    return 0;
+                } else
+                    break;
+            case WM_DESTROY:
+                if constexpr (requires { self->on_destroy(); }) {
+                    self->on_destroy();
+                    return 0;
+                } else
+                    break;
+            default:
+                break;
+        }
+        return std::nullopt;
+    }
+};
+
+/// Routes WM_SIZE to `Derived::on_size(width, height)` (client area, from lparam).
+template <typename Derived>
+struct Sizable {
+    std::optional<LRESULT> dispatch(UINT msg, WPARAM, LPARAM lparam) {
+        [[maybe_unused]] auto* self = static_cast<Derived*>(this);
+        if (msg == WM_SIZE) {
+            if constexpr (requires { self->on_size(0U, 0U); }) {
+                self->on_size(LOWORD(lparam), HIWORD(lparam));
+                return 0;
+            }
+        }
+        return std::nullopt;
+    }
+};
+
+/// Routes WM_COMMAND to `Derived::on_command(id)` (menu / control id, low word of
+/// wparam). The parent window receives a control's WM_COMMAND, not the control.
+template <typename Derived>
+struct Commandable {
+    std::optional<LRESULT> dispatch(UINT msg, WPARAM wparam, LPARAM) {
+        [[maybe_unused]] auto* self = static_cast<Derived*>(this);
+        if (msg == WM_COMMAND) {
+            if constexpr (requires { self->on_command(0); }) {
+                self->on_command(LOWORD(wparam));
+                return 0;
+            }
+        }
+        return std::nullopt;
+    }
+};
+
 }  // namespace winwrap

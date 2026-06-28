@@ -41,8 +41,10 @@ struct WindowConfig {
 ///            `static constexpr const wchar_t* window_class_name` and be
 ///            default-constructible.
 template <typename T>
-class Window : public Dispatcher<T, Paintable, MouseInput, KeyboardInput, FocusAware> {
-    using messages = Dispatcher<T, Paintable, MouseInput, KeyboardInput, FocusAware>;
+class Window : public Dispatcher<T, Lifecycle, Sizable, Commandable, Paintable, MouseInput,
+                                 KeyboardInput, FocusAware> {
+    using messages = Dispatcher<T, Lifecycle, Sizable, Commandable, Paintable, MouseInput,
+                                KeyboardInput, FocusAware>;
 
 public:
     Window(const Window&) = delete;
@@ -72,58 +74,23 @@ public:
     void show(int cmd = SW_SHOW) { ShowWindow(hwnd_, cmd); }
 
     /// Routes a message to the matching `on_*` hook the derived window defines,
-    /// or to `DefWindowProcW` when there is none. Hooks are detected at compile
-    /// time, so define only the ones you need -- as **public** members:
+    /// or to `DefWindowProcW` when none claims it. Hooks are detected at compile
+    /// time (define only the ones you need, as **public** members) and come from
+    /// the composable message traits in <winwrap/messages.hpp> this base mixes in:
     ///
-    ///   - `on_create()`            -- WM_CREATE
-    ///   - `on_close()`             -- WM_CLOSE
-    ///   - `on_destroy()`           -- WM_DESTROY
-    ///   - `on_size(w, h)`          -- WM_SIZE (client width/height)
-    ///   - `on_command(id)`         -- WM_COMMAND (menu / control id)
-    ///
-    /// Paint, mouse, keyboard, and focus hooks come from the composable message
-    /// traits in <winwrap/messages.hpp>, which this base mixes in.
+    ///   - `on_create()` / `on_close()` / `on_destroy()`  -- lifecycle
+    ///   - `on_size(w, h)`        -- WM_SIZE (client width/height)
+    ///   - `on_command(id)`       -- WM_COMMAND (menu / control id)
+    ///   - `on_paint()`           -- WM_PAINT
+    ///   - `on_mouse_move(x, y)` / `on_lbutton_down(x, y)` / `on_lbutton_up(x, y)`
+    ///   - `on_key_down(vk)`      -- WM_KEYDOWN (virtual-key code)
+    ///   - `on_focus(gained)`     -- WM_SETFOCUS (true) / WM_KILLFOCUS (false)
     ///
     /// For a message with a runtime id (e.g. a tray callback), shadow this whole
     /// function in T instead and delegate the rest with `Window::handle_message`.
     LRESULT handle_message(UINT msg, WPARAM wparam, LPARAM lparam) {
         if (auto r = messages::dispatch(msg, wparam, lparam))
             return *r;
-        [[maybe_unused]] T* self = static_cast<T*>(this);
-        switch (msg) {
-            case WM_CREATE:
-                if constexpr (requires { self->on_create(); }) {
-                    self->on_create();
-                    return 0;
-                } else
-                    break;
-            case WM_CLOSE:
-                if constexpr (requires { self->on_close(); }) {
-                    self->on_close();
-                    return 0;
-                } else
-                    break;
-            case WM_DESTROY:
-                if constexpr (requires { self->on_destroy(); }) {
-                    self->on_destroy();
-                    return 0;
-                } else
-                    break;
-            case WM_SIZE:
-                if constexpr (requires { self->on_size(0U, 0U); }) {
-                    self->on_size(LOWORD(lparam), HIWORD(lparam));
-                    return 0;
-                } else
-                    break;
-            case WM_COMMAND:
-                if constexpr (requires { self->on_command(0); }) {
-                    self->on_command(LOWORD(wparam));
-                    return 0;
-                } else
-                    break;
-            default:
-                break;
-        }
         return DefWindowProcW(hwnd_, msg, wparam, lparam);
     }
 
