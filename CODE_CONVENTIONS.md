@@ -71,6 +71,32 @@ can fail.)
 **Precedent:** `Window::create` / `NotifyIcon::create` (fallible factories),
 `create_window` / `create_control` (private workers), `make_data` (infallible builder).
 
+## 3. Where shared code lives — conventions early, abstractions late
+
+As the library grows, decide *where* a thing belongs by what conceptually needs it
+— and extract shared code **reactively**, never speculatively.
+
+- **Per-resource headers own their specifics.** Anything only one wrapper needs
+  stays in that wrapper's header, even if the underlying mechanism *looks* generic.
+  `notify_icon.hpp` owns `taskbar_created_message()` — only tray icons care about
+  the "TaskbarCreated" broadcast.
+- **Cross-cutting concerns live in concept-named shared headers.** A utility every
+  wrapper uses goes in a focused header named for the concept. `error.hpp`
+  (`last_error`, `checked`) is the precedent. Future shared concepts each get their
+  own header (e.g. a reserved `shell.hpp` for shell/taskbar integration commons).
+
+**The move trigger — the second real consumer.** Keep a thing local until a
+*second* wrapper genuinely needs it; only then lift it into the appropriate shared
+header. This is `LIBRARY_CONVENTIONS.md`'s reactive-extraction rule applied inside
+winwrap: a one-caller "utility" is premature abstraction — you'll guess the shape
+wrong before you've seen two real uses.
+
+Set the **convention** (the destination + naming) early so there's no sprawl and the
+eventual move is mechanical; do the **extraction** late, when the trigger fires. Worked
+example: `taskbar_created_message()` stays on `NotifyIcon` today, but its reserved home
+is a future `shell.hpp` — so if an `ITaskbarList3` wrapper ever shares the
+Explorer-restart concern, it moves there with no redesign.
+
 ## See also
 
 - `VISION.md` — design pillars (CRTP, value-based errors, WIL-only deps).
