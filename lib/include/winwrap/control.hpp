@@ -36,18 +36,32 @@ struct ControlConfig {
 /// CRTP base for a native child control -- a button, edit box, checkbox, etc.: a
 /// WS_CHILD window of a system-registered class ("BUTTON", "EDIT", "STATIC", ...).
 /// Derive as `class MyButton : public winwrap::Control<MyButton>`: the base owns
-/// creation, the SetWindowSubclass->object bridge, and teardown, while T provides
-/// `static constexpr const wchar_t* control_class` and shadows the on_* hooks.
-/// Dispatch resolves at compile time -- no virtual. Non-movable; lives as a
-/// unique_ptr member of the owner window, created in its on_created().
+/// creation, the SetWindowSubclass->object bridge, message routing, and teardown,
+/// while T provides `static constexpr const wchar_t* control_class` and defines the
+/// on_* hooks it cares about. Dispatch resolves at compile time -- no virtual.
+/// Non-movable; lives as a unique_ptr member of the owner window, created in its
+/// on_created().
+///
+/// Messages route to the matching hook T defines, or to DefSubclassProc when none
+/// claims it (see handle_message, inherited from MessageHandler). Define only the
+/// hooks you need, as **public** members; they come from the composable message
+/// traits in <winwrap/messages.hpp>:
+///
+///   - `on_paint()`              -- WM_PAINT
+///   - `on_mouse_move(x, y)`     -- WM_MOUSEMOVE
+///   - `on_lbutton_down(x, y)`   -- WM_LBUTTONDOWN
+///   - `on_lbutton_up(x, y)`     -- WM_LBUTTONUP
+///   - `on_key_down(vk)`         -- WM_KEYDOWN (virtual-key code)
+///   - `on_focus(gained)`        -- WM_SETFOCUS (true) / WM_KILLFOCUS (false)
+///
+/// Shadow handle_message in T for anything the named hooks don't cover, and
+/// delegate the rest with `Control::handle_message`.
 ///
 /// @tparam T  The derived control type. Must provide
 ///            `static constexpr const wchar_t* control_class` and be
 ///            default-constructible.
 template <typename T>
-class Control : public Dispatcher<T, Paintable, MouseInput, KeyboardInput, FocusAware> {
-    using messages = Dispatcher<T, Paintable, MouseInput, KeyboardInput, FocusAware>;
-
+class Control : public MessageHandler<T, Paintable, MouseInput, KeyboardInput, FocusAware> {
 public:
     Control(const Control&) = delete;
     Control& operator=(const Control&) = delete;
@@ -77,23 +91,9 @@ public:
     /// Enables or disables the control (EnableWindow).
     void enable(bool enabled) { EnableWindow(hwnd_, enabled); }
 
-    /// Routes a message to the matching on_* hook T defines, or to DefSubclassProc
-    /// when there is none. Hooks are detected at compile time, so define only the
-    /// ones you need -- as **public** members. They come from the composable
-    /// message traits in <winwrap/messages.hpp>, which this base mixes in:
-    ///
-    ///   - `on_paint()`              -- WM_PAINT
-    ///   - `on_mouse_move(x, y)`     -- WM_MOUSEMOVE
-    ///   - `on_lbutton_down(x, y)`   -- WM_LBUTTONDOWN
-    ///   - `on_lbutton_up(x, y)`     -- WM_LBUTTONUP
-    ///   - `on_key_down(vk)`         -- WM_KEYDOWN (virtual-key code)
-    ///   - `on_focus(gained)`        -- WM_SETFOCUS (true) / WM_KILLFOCUS (false)
-    ///
-    /// Shadow this whole function in T for anything the named hooks don't cover,
-    /// and delegate the rest with `Control::handle_message`.
-    LRESULT handle_message(UINT msg, WPARAM wparam, LPARAM lparam) {
-        if (auto r = messages::dispatch(msg, wparam, lparam))
-            return *r;
+    /// The message fallback: hands any message no hook claimed to DefSubclassProc.
+    /// Called by handle_message (inherited from MessageHandler); not for direct use.
+    LRESULT default_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
         return DefSubclassProc(hwnd_, msg, wparam, lparam);
     }
 

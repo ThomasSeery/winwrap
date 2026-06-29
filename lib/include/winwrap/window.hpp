@@ -33,19 +33,33 @@ struct WindowConfig {
 
 /// CRTP base for a top-level window. Derive as
 /// `class MyWindow : public winwrap::Window<MyWindow>`: the base owns class
-/// registration, the WndProc->object bridge, and teardown, while T shadows
-/// `handle_message` (and optionally `configure_class` / `on_created`). Dispatch
-/// resolves at compile time via static_cast<T*> -- no virtual, no vtable.
+/// registration, the WndProc->object bridge, message routing, and teardown, while
+/// T defines the on_* hooks it cares about (and optionally `configure_class` /
+/// `on_created`). Dispatch resolves at compile time via static_cast<T*> -- no
+/// virtual, no vtable.
+///
+/// Messages route to the matching hook the window defines, or to DefWindowProcW
+/// when none claims it (see handle_message, inherited from MessageHandler). Define
+/// only the hooks you need, as **public** members; they come from the composable
+/// message traits in <winwrap/messages.hpp>:
+///
+///   - `on_create()` / `on_close()` / `on_destroy()`  -- lifecycle
+///   - `on_size(w, h)`        -- WM_SIZE (client width/height)
+///   - `on_command(id)`       -- WM_COMMAND (menu / control id)
+///   - `on_paint()`           -- WM_PAINT
+///   - `on_mouse_move(x, y)` / `on_lbutton_down(x, y)` / `on_lbutton_up(x, y)`
+///   - `on_key_down(vk)`      -- WM_KEYDOWN (virtual-key code)
+///   - `on_focus(gained)`     -- WM_SETFOCUS (true) / WM_KILLFOCUS (false)
+///
+/// For a message with a runtime id (e.g. a tray callback), shadow handle_message
+/// in T and delegate the rest with `Window::handle_message`.
 ///
 /// @tparam T  The derived window type. Must provide
 ///            `static constexpr const wchar_t* window_class_name` and be
 ///            default-constructible.
 template <typename T>
-class Window : public Dispatcher<T, Lifecycle, Sizable, Commandable, Paintable, MouseInput,
-                                 KeyboardInput, FocusAware> {
-    using messages = Dispatcher<T, Lifecycle, Sizable, Commandable, Paintable, MouseInput,
-                                KeyboardInput, FocusAware>;
-
+class Window : public MessageHandler<T, Lifecycle, Sizable, Commandable, Paintable, MouseInput,
+                                     KeyboardInput, FocusAware> {
 public:
     Window(const Window&) = delete;
     Window& operator=(const Window&) = delete;
@@ -73,24 +87,9 @@ public:
     ///             nShowCmd on first display to honour how the app was launched.
     void show(int cmd = SW_SHOW) { ShowWindow(hwnd_, cmd); }
 
-    /// Routes a message to the matching `on_*` hook the derived window defines,
-    /// or to `DefWindowProcW` when none claims it. Hooks are detected at compile
-    /// time (define only the ones you need, as **public** members) and come from
-    /// the composable message traits in <winwrap/messages.hpp> this base mixes in:
-    ///
-    ///   - `on_create()` / `on_close()` / `on_destroy()`  -- lifecycle
-    ///   - `on_size(w, h)`        -- WM_SIZE (client width/height)
-    ///   - `on_command(id)`       -- WM_COMMAND (menu / control id)
-    ///   - `on_paint()`           -- WM_PAINT
-    ///   - `on_mouse_move(x, y)` / `on_lbutton_down(x, y)` / `on_lbutton_up(x, y)`
-    ///   - `on_key_down(vk)`      -- WM_KEYDOWN (virtual-key code)
-    ///   - `on_focus(gained)`     -- WM_SETFOCUS (true) / WM_KILLFOCUS (false)
-    ///
-    /// For a message with a runtime id (e.g. a tray callback), shadow this whole
-    /// function in T instead and delegate the rest with `Window::handle_message`.
-    LRESULT handle_message(UINT msg, WPARAM wparam, LPARAM lparam) {
-        if (auto r = messages::dispatch(msg, wparam, lparam))
-            return *r;
+    /// The message fallback: hands any message no hook claimed to DefWindowProcW.
+    /// Called by handle_message (inherited from MessageHandler); not for direct use.
+    LRESULT default_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
         return DefWindowProcW(hwnd_, msg, wparam, lparam);
     }
 

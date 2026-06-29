@@ -29,4 +29,22 @@ struct Dispatcher : Traits<Derived>... {
     }
 };
 
+/// A Dispatcher plus the top-level `handle_message` entry point: try the composed
+/// traits first (first match wins), and when none claims the message, fall back to
+/// the derived type's `default_proc`. Use this in place of Dispatcher as the CRTP
+/// base wherever a wrapper needs the full WndProc entry point, not just routing --
+/// the only thing that varies between wrappers is which default proc closes the gap.
+///
+/// @tparam Derived  The final user type; must provide a public
+///                  `LRESULT default_proc(UINT, WPARAM, LPARAM)`.
+/// @tparam Traits   The message traits to compose, tried in the order given.
+template <typename Derived, template <typename> typename... Traits>
+struct MessageHandler : Dispatcher<Derived, Traits...> {
+    LRESULT handle_message(UINT msg, WPARAM wparam, LPARAM lparam) {
+        if (auto r = this->dispatch(msg, wparam, lparam))
+            return *r;
+        return static_cast<Derived*>(this)->default_proc(msg, wparam, lparam);
+    }
+};
+
 }  // namespace winwrap
