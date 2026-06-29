@@ -10,8 +10,8 @@ composing through the `on_*` hooks. Design is locked (see *Decisions locked* →
 *Tray / menu integration*) — don't re-litigate; build straight against it.
 
 > **v0.2 `Control<T>` is ✅ done** — implemented + MSVC-verified (compiles + links via
-> `control_test`; see [CONTROL_PLAN.md](CONTROL_PLAN.md)), though not yet exercised on
-> screen (§8). Next: a control-on-screen exercise app, then the v0.1 app track below.
+> `control_test`), though not yet exercised on screen. Next: a control-on-screen
+> exercise app, then the v0.1 app track below.
 
 1. ~~`hello-window` example~~ — ✅ **Done & runs on screen.**
    `MainWindow : public Window<MainWindow>` + `wWinMain` + message loop. It's a
@@ -185,10 +185,8 @@ and tagged), here's the planned order. **None of this blocks v0.1.**
 
 ### v0.2 — Controls (`Control<T>` — the CRTP control base)
 
-Full spec: **[CONTROL_PLAN.md](CONTROL_PLAN.md)** (governs this section).
-
 > **✅ `Control<T>` done** (2026-06-28) — implemented + MSVC-verified (compiles + links
-> via `tests/control_test.cpp`). Remaining: exercise it on screen (CONTROL_PLAN §8).
+> via `tests/control_test.cpp`). Remaining: exercise it on screen.
 
 > **Not gated behind v0.1.** Controls is library work, independent of the v0.1 app
 > track (`tray_app` → wifi-toggle → tag): no shared code, nothing extra to link, so

@@ -56,9 +56,7 @@ std::expected<void, std::error_code> NotifyIcon::set_tooltip(const wchar_t* text
     NOTIFYICONDATAW nid = make_data();
     nid.uFlags = NIF_TIP | NIF_SHOWTIP;
     wcsncpy_s(nid.szTip, tooltip_.c_str(), _TRUNCATE);
-    if (Shell_NotifyIconW(NIM_MODIFY, &nid) == 0)
-        return std::unexpected(last_error());
-    return {};
+    return checked(Shell_NotifyIconW(NIM_MODIFY, &nid));
 }
 
 std::expected<void, std::error_code> NotifyIcon::add() {
@@ -67,14 +65,11 @@ std::expected<void, std::error_code> NotifyIcon::add() {
     nid.uCallbackMessage = callback_msg_;
     nid.hIcon = icon_.get();
     wcsncpy_s(nid.szTip, tooltip_.c_str(), _TRUNCATE);
-    if (Shell_NotifyIconW(NIM_ADD, &nid) == 0)
-        return std::unexpected(last_error());
+    if (auto added = checked(Shell_NotifyIconW(NIM_ADD, &nid)); !added)
+        return added;
 
     nid.uVersion = NOTIFYICON_VERSION_4;
-    if (Shell_NotifyIconW(NIM_SETVERSION, &nid) == 0)
-        return std::unexpected(last_error());
-
-    return {};
+    return checked(Shell_NotifyIconW(NIM_SETVERSION, &nid));
 }
 
 UINT NotifyIcon::taskbar_created_message() {
