@@ -43,6 +43,34 @@ stay positional — it has a single call site and isn't exposed.
 
 **Precedent:** `WindowConfig` → `Window::create`, `NotifyIconConfig` → `NotifyIcon::create`.
 
+## 2. Factory & builder naming — `create` vs `make_*`
+
+The verb a function picks tells the reader its contract. The deciding question is
+**"can it fail / does it own a resource?"** — *not* whether it's public or private.
+
+- **`create`** — a named constructor that **acquires an OS resource and can fail**,
+  so it returns `std::expected<T, std::error_code>` (a real constructor can't). The
+  public factory is `create`; its private worker that does the actual acquisition
+  takes the same family with a suffix, `create_<thing>`.
+- **`make_*`** — a helper that **builds a plain value and cannot fail**; it returns
+  the value by value, never an `expected`. This is the standard-library idiom
+  (`std::make_pair`, `make_tuple`, `make_optional`).
+
+```cpp
+static std::expected<NotifyIcon, std::error_code> create(const NotifyIconConfig&); // acquires + can fail
+std::expected<void, std::error_code>              create_control(const ControlConfig&); // private worker
+NOTIFYICONDATAW                                   make_data() const noexcept;        // builds a value, can't fail
+```
+
+Public/private is only a *correlation*: resource factories are usually the public
+entry points and value-builders are usually private helpers — but the name follows
+the **failability + ownership**, not the visibility. (`create_window` /
+`create_control` are private yet correctly `create_*`: they acquire a window and
+can fail.)
+
+**Precedent:** `Window::create` / `NotifyIcon::create` (fallible factories),
+`create_window` / `create_control` (private workers), `make_data` (infallible builder).
+
 ## See also
 
 - `VISION.md` — design pillars (CRTP, value-based errors, WIL-only deps).
