@@ -59,15 +59,16 @@ composing through the `on_*` hooks. Design is locked (see *Decisions locked* →
   the struct-doc style lives in `cpp/CODE_CONVENTIONS.md` (all projects).
 - **Errors as `std::expected<T, std::error_code>`** at the public API; Win32 codes
   via `std::system_category()`. WIL stays for RAII handles only, not control flow.
-- **Message dispatch via composable CRTP traits** (`messages.hpp` + `dispatcher.hpp`).
-  Seven empty-base traits — `Lifecycle`, `Sizable`, `Commandable`, `Paintable`,
+- **Message dispatch via composable CRTP mixins** (`mixins.hpp` +
+  `message_reflection.hpp` + `message_handler.hpp`).
+  Seven empty-base mixins — `Lifecycle`, `Sizable`, `Commandable`, `Paintable`,
   `MouseInput`, `KeyboardInput`, `FocusAware` — each expose
   `std::optional<LRESULT> dispatch(UINT, WPARAM, LPARAM)`: engaged = handled,
-  `nullopt` = pass on. `Dispatcher<T, Traits...>` chains them via a fold expression
-  (`||`), short-circuiting on first match. Both `Window<T>` and `Control<T>` inherit
-  via `Dispatcher`; their `handle_message` is now pure — `messages::dispatch(...)`
-  then `Def*Proc`. The `WW_CASE(message, call)` macro (defined + `#undef`'d inside
-  `messages.hpp`) is the only tool that can simultaneously put a maybe-absent member
+  `nullopt` = pass on. `MessageHandler<T, Mixins...>` chains them via a fold
+  expression (`||`), short-circuiting on first match, and its `handle_message`
+  falls back to the derived type's `default_proc` when no mixin claims the
+  message. Both `Window<T>` and `Control<T>` inherit it. The `WW_CASE(message, call)` macro (defined + `#undef`'d inside
+  `mixins.hpp`) is the only tool that can simultaneously put a maybe-absent member
   into an unevaluated `requires` and `return`/`break` from the caller's frame — one
   line per case, zero duplication. No vtables; all resolved at compile time. Derived
   types define only the **public** `on_*` hooks they need. `handle_message` stays
@@ -208,19 +209,27 @@ widget; `Control<T>` supplies the same compile-time `on_*` dispatch as `Window<T
   *runtime-callback* design (thin `Button` instances + a `CommandRouter` + a
   `Window<T>` routing edit) — **rejected**: no `CommandRouter`, no edit to
   `window.hpp`.
-- **Click semantics:** a control's `BN_CLICKED` still arrives at the **parent** as
-  `WM_COMMAND` → the window's existing `on_command(id)` — handle clicks there,
-  keyed by `id`. `Control<T>` intercepts the control's *own* messages. Click-on-the-
-  control-object (message reflection) is a future *additive* layer.
+- **Click semantics:** a control's `BN_CLICKED` arrives at the **parent** as
+  `WM_COMMAND`. ~~Click-on-the-control-object (message reflection) is a future
+  *additive* layer.~~ **✅ Built (2026-06-30):** the parent's `Reflecting` mixin now
+  bounces the notification back down to the control (`wm_command_reflect`), where the
+  control's own mixin fires the callback. Menu / accelerator commands
+  (`lparam == 0`) still go to the window's `on_command(id)` via `Commandable`.
 - **Lifetime** mirrors `Window<T>`: non-movable, `create()` →
   `std::expected<std::unique_ptr<T>, std::error_code>`, held as a `unique_ptr`
   member of the owner window; the parent destroys the child HWND (no
   `DestroyWindow`); the dtor / `WM_NCDESTROY` just `RemoveWindowSubclass`.
-- **`Control<T>` is the deliverable, not a control catalog.** Apps derive their own
-  control types from it; the library does **not** ship pre-built `Button` / `Edit` /
-  `ComboBox` wrappers (that's the WTL/Win32++ toolkit direction — out of scope).
-  A concrete `final` control enters the library *only reactively* — when the same
-  derive-boilerplate recurs across 2–3 real apps — never as a planned set.
+- **`Control<T>` + a mixin-composed control catalog (revised 2026-06-30).** The
+  earlier "no pre-built controls, extract only reactively" stance is **superseded.**
+  `Control<T>` stays the base, but the library now *does* ship concrete `final`
+  controls, each composing the **notification mixins** it emits:
+    - `Button` / `Checkbox` → `Clickable` (BN_CLICKED)
+    - `Edit` → `TextChangeable` (EN_CHANGE)
+    - `ComboBox` → `SelectionChangeable` (CBN_SELCHANGE)
+  A mixin is one file under `mixins/`; a control is one file under `controls/`;
+  the engine (`message_reflection.hpp` / `message_handler.hpp`) never changes as either grows. See
+  `MIXINS.md` for the recipe. This is still **thin shells over native controls** —
+  not a widget toolkit; the hard boundary below (no layout / theming) is unchanged.
 
 **Hard boundary:** native controls + the subclass building block *only* — no layout
 engine, no theming framework, no widget toolkit. Not a Qt/wxWidgets replacement.

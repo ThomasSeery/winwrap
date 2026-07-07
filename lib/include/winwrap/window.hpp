@@ -1,20 +1,16 @@
 #pragma once
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
+#include "winwrap/win.hpp"
 
 #include <expected>
 #include <memory>
 #include <system_error>
 
-#include "winwrap/dispatcher.hpp"
+#include "winwrap/mixins.hpp"
+#include "winwrap/message_handler.hpp"
 #include "winwrap/error.hpp"
-#include "winwrap/messages.hpp"
+#include "winwrap/message_reflection.hpp"
+#include "winwrap/window_handle.hpp"
 
 namespace winwrap {
 
@@ -41,15 +37,15 @@ struct WindowConfig {
 /// Messages route to the matching hook the window defines, or to DefWindowProcW
 /// when none claims it (see handle_message, inherited from MessageHandler). Define
 /// only the hooks you need, as **public** members; they come from the composable
-/// message traits in <winwrap/messages.hpp>:
+/// mixins in <winwrap/mixins.hpp>:
 ///
 ///   - `on_create()` / `on_close()` / `on_destroy()`  -- lifecycle
-///   - `on_size(w, h)`        -- WM_SIZE (client width/height)
-///   - `on_command(id)`       -- WM_COMMAND (menu / control id)
-///   - `on_paint()`           -- WM_PAINT
+///   - `on_size(w, h)`        -- `WM_SIZE` (client width/height)
+///   - `on_command(id)`       -- `WM_COMMAND` (menu / control id)
+///   - `on_paint()`           -- `WM_PAINT`
 ///   - `on_mouse_move(x, y)` / `on_lbutton_down(x, y)` / `on_lbutton_up(x, y)`
-///   - `on_key_down(vk)`      -- WM_KEYDOWN (virtual-key code)
-///   - `on_focus(gained)`     -- WM_SETFOCUS (true) / WM_KILLFOCUS (false)
+///   - `on_key_down(vk)`      -- `WM_KEYDOWN` (virtual-key code)
+///   - `on_focus(gained)`     -- `WM_SETFOCUS` (true) / `WM_KILLFOCUS` (false)
 ///
 /// For a message with a runtime id (e.g. a tray callback), shadow handle_message
 /// in T and delegate the rest with `Window::handle_message`.
@@ -58,8 +54,9 @@ struct WindowConfig {
 ///            `static constexpr const wchar_t* window_class_name` and be
 ///            default-constructible.
 template <typename T>
-class Window : public MessageHandler<T, Lifecycle, Sizable, Commandable, Paintable, MouseInput,
-                                     KeyboardInput, FocusAware> {
+class Window : public WindowHandle,
+               public MessageHandler<T, Lifecycle, Sizable, Commandable, Reflecting, Paintable,
+                                     MouseInput, KeyboardInput, FocusAware> {
 public:
     Window(const Window&) = delete;
     Window& operator=(const Window&) = delete;
@@ -79,28 +76,20 @@ public:
         return self;
     }
 
-    /// The underlying window handle, or nullptr once the window is destroyed.
-    [[nodiscard]] HWND hwnd() const { return hwnd_; }
-
-    /// Shows the window (or applies another ShowWindow command).
-    /// @param cmd  A ShowWindow command; defaults to SW_SHOW. Pass wWinMain's
-    ///             nShowCmd on first display to honour how the app was launched.
-    void show(int cmd = SW_SHOW) { ShowWindow(hwnd_, cmd); }
-
     /// The message fallback: hands any message no hook claimed to DefWindowProcW.
     /// Called by handle_message (inherited from MessageHandler); not for direct use.
     LRESULT default_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
-        return DefWindowProcW(hwnd_, msg, wparam, lparam);
+        return DefWindowProcW(hwnd(), msg, wparam, lparam);
     }
 
 protected:
     Window() = default;
     ~Window() {
-        if (hwnd_) {
+        if (hwnd()) {
             // Detach first so the destroy messages don't dispatch into a
             // half-destroyed object.
-            SetWindowLongPtrW(hwnd_, GWLP_USERDATA, 0);
-            DestroyWindow(hwnd_);
+            SetWindowLongPtrW(hwnd(), GWLP_USERDATA, 0);
+            DestroyWindow(hwnd());
         }
     }
 
@@ -112,6 +101,7 @@ protected:
     /// that needs a live HWND.
     void on_created() {}
 
+private:
     std::expected<void, std::error_code> create_window(const WindowConfig& cfg) {
         // --- Registration (per class name): sensible defaults, then let T tweak.
         WNDCLASSW wc{};
@@ -140,13 +130,12 @@ protected:
         return {};
     }
 
-private:
     static LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
         T* self{};
         if (msg == WM_NCCREATE) {
             auto* cs = reinterpret_cast<CREATESTRUCTW*>(lparam);
             self = static_cast<T*>(cs->lpCreateParams);
-            self->hwnd_ = hwnd;
+            self->attach(hwnd);
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
         } else {
             self = reinterpret_cast<T*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
@@ -158,14 +147,13 @@ private:
                 // The window is gone; sever the link so the destructor won't
                 // DestroyWindow a dead handle.
                 SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
-                self->hwnd_ = nullptr;
+                self->detach();
             }
             return result;
         }
         return DefWindowProcW(hwnd, msg, wparam, lparam);
     }
 
-    HWND hwnd_{};
     const HINSTANCE instance_{GetModuleHandleW(nullptr)};
 };
 

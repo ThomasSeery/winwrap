@@ -9,7 +9,11 @@ FetchContent_MakeAvailable(Catch2)
 
 add_executable(winwrap_test
     window_test.cpp
-    control_test.cpp)
+    control_test.cpp
+    button_test.cpp
+    checkbox_test.cpp
+    edit_test.cpp
+    combobox_test.cpp)
 
 target_link_libraries(winwrap_test
     PRIVATE

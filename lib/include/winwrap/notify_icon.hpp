@@ -1,12 +1,6 @@
 #pragma once
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
+#include "winwrap/win.hpp"
 
 #include <shellapi.h>
 
@@ -22,7 +16,7 @@ namespace winwrap {
 /// designated initializers; omitted fields take the defaults.
 struct NotifyIconConfig {
     HWND owner{};                ///< Window tray events post to (its handle_message).
-    UINT callback_msg{};         ///< App message id the events arrive as; use WM_APP + n.
+    UINT callback_msg{};         ///< App message id the events arrive as; use `WM_APP + n`.
     UINT id{};                   ///< Identifies this icon within the owner.
     HICON icon{};                ///< Adopted -- must be safe to DestroyIcon (not a shared system icon).
     const wchar_t* tooltip{L""}; ///< Hover text; truncated past 127 chars.
@@ -30,12 +24,12 @@ struct NotifyIconConfig {
 
 /// A system-tray (notification-area) icon. Owns its HICON and its shell
 /// registration, and attaches to a Window<T> you own: pass that window's HWND
-/// plus an app-private callback message id (use WM_APP + n).
+/// plus an app-private callback message id (use `WM_APP + n`).
 ///
 /// Tray events arrive at the owner window as that callback message. Targeting
-/// NOTIFYICON_VERSION_4, decode them in the owner's handle_message: the event is
-/// LOWORD(lParam) (e.g. WM_CONTEXTMENU on right-click, NIN_SELECT on left-click)
-/// and the icon id is HIWORD(lParam). On destruction the icon is removed.
+/// `NOTIFYICON_VERSION_4`, decode them in the owner's handle_message: the event is
+/// `LOWORD(lParam)` (e.g. `WM_CONTEXTMENU` on right-click, `NIN_SELECT` on left-click)
+/// and the icon id is `HIWORD(lParam)`. On destruction the icon is removed.
 class NotifyIcon final {
 public:
     /// Adds the icon to the notification area, or the Win32 error that stopped it.

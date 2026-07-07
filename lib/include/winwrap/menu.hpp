@@ -1,12 +1,6 @@
 #pragma once
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
+#include "winwrap/win.hpp"
 
 #include <expected>
 #include <system_error>
@@ -17,7 +11,7 @@
 namespace winwrap {
 
 /// A popup (context) menu. Owns its HMENU; when the user picks an item, Win32
-/// posts WM_COMMAND (carrying the item's id) to the owner window -- handle it in
+/// posts `WM_COMMAND` (carrying the item's id) to the owner window -- handle it in
 /// the owner's on_command. Build with add_item, then show.
 class Menu final {
 public:
@@ -29,7 +23,7 @@ public:
     /// @param text  The item's label.
     std::expected<void, std::error_code> add_item(UINT id, const wchar_t* text);
 
-    /// Pops the menu up at the cursor; the chosen item posts WM_COMMAND to owner.
+    /// Pops the menu up at the cursor; the chosen item posts `WM_COMMAND` to owner.
     void show(HWND owner);
 
     /// The underlying menu handle -- a non-owning view, for dropping to raw Win32.
