@@ -89,7 +89,9 @@ struct SelectionChangeable {
 - **Callback signature carries the payload.** A click is `void()`; a notification with
   data takes it as parameters (e.g. a selection index), not as raw Win32 words.
 - **Menu / accelerator commands are *not* control notifications** — they have no
-  control behind them (`lparam == 0`) and go to the window's `Commandable` →
-  `on_command(id)`. `Reflecting` only handles `lparam != 0`.
+  control behind them (`lparam == 0`). A callback menu item (`add_item(text,
+  handler)`) is resolved inside `Menu::show` itself via `TPM_RETURNCMD` and never
+  reaches the window; legacy-id items and accelerators still go to the window's
+  `Commandable` → `on_command(id)`. `Reflecting` only handles `lparam != 0`.
 - **A second message that needs reflecting (WM_NOTIFY)** joins `Reflecting`; the
   control-side mixins stay exactly this shape.

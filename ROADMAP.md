@@ -43,6 +43,9 @@ Close these before or while wiring — wifi-toggle needs each one:
    helper is additive later, growing toward accelerators / modeless-dialog /
    idle handling only if ever needed (WinLamb `RUN()`, Win32++ `CWinApp::Run`,
    WTL `CMessageLoop` are the precedents).
+4. **Per-item menu callbacks** — elected for v0.1 (ergonomics, not strictly
+   blocking): kills the `on_command` id switch in the app. Design settled — see
+   *Decisions locked → Menu routing (revised)* and MENU_CALLBACKS_PROMPT.md.
 
 Non-gaps confirmed by the survey: `NotifyIcon` already exceeds every surveyed
 library (v4 protocol + TaskbarCreated re-add; Win32++'s tray sample is legacy-v0
@@ -122,9 +125,16 @@ result).
   `handle_message`. *Not* a self-contained callback object — one event path, no
   parallel `std::function` layer. A `TrayApp` convenience bundle can be added later,
   additively.
-- **Menu routing:** `Menu::show` posts **`WM_COMMAND` to the owner window**,
-  delivered to the owner's **`on_command(id)`** hook (via the `handle_message`
-  dispatcher) — not `TPM_RETURNCMD`. All events on one path.
+- **Menu routing (revised 2026-07-12 — supersedes the posted-`WM_COMMAND`-only
+  design):** menu items take **per-item callbacks** — `add_item(text, handler)`
+  auto-assigns an internal id (from `0xE000` up) and stores the handler inside the
+  `Menu`; `show` uses `TPM_RETURNCMD` and fires the picked item's handler directly,
+  so the id machinery is invisible library plumbing (like control-notification ids).
+  **Escape hatch:** the legacy `add_item(id, text)` overload stays; a picked id with
+  no stored handler is re-posted as `WM_COMMAND` to the owner → `on_command(id)` via
+  `Commandable` — legacy menus, mixed menus, and accelerators behave exactly as
+  before. Per item there is exactly one route, chosen by which overload added it.
+  User-chosen ids must stay below `0xE000`; on a collision the callback wins.
 - **Tray events exposed raw** (you `switch` on the callback message in
   `handle_message`) for the MVP. A typed `TrayEvent` enum is a future *additive*
   layer, not a v1 requirement.
@@ -166,7 +176,10 @@ Delivered in `lib/include/winwrap/menu.hpp` + `lib/src/menu.cpp`:
   `TrackPopupMenuEx` (no `TPM_RETURNCMD`) + `PostMessageW(owner, WM_NULL, 0, 0)`
   (both `TrackPopupMenu` gotchas).
 - **`handle()`** — non-owning `HMENU` accessor (escape hatch).
-- **Click routing (LOCKED):** `show` posts `WM_COMMAND` → owner's `on_command(id)`.
+- **Click routing (revised 2026-07-12):** per-item callbacks fired from `show` via
+  `TPM_RETURNCMD` (see *Decisions locked → Menu routing*); the legacy
+  `add_item(id, text)` → posted `WM_COMMAND` → `on_command(id)` path remains.
+  Implementation pending (see MENU_CALLBACKS_PROMPT.md).
 
 Builds clean, clang-tidy-clean. **Not yet exercised** by an example — wire a `Menu`
 into a window (right-click → `show()` → `on_command`); wifi-toggle will cover it.
