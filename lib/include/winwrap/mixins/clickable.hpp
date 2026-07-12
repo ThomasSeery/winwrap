@@ -18,7 +18,7 @@ namespace winwrap {
 struct Clickable {
     std::function<void()> on_click;  ///< Assign your handler; unset = nothing happens.
 
-    [[nodiscard]] std::optional<LRESULT> handle(UINT msg, WPARAM wparam, LPARAM) const {
+    [[nodiscard]] std::optional<LRESULT> handle_message(UINT msg, WPARAM wparam, LPARAM) const {
         return handle_notification(msg, wparam, BN_CLICKED, on_click);
     }
 };

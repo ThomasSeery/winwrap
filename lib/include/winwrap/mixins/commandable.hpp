@@ -14,8 +14,8 @@ namespace winwrap {
 /// or another mixin matches `WM_COMMAND` -- one handler silently steals the other's
 /// messages. Keep the split exact.
 struct Commandable {
-    std::optional<LRESULT> handle([[maybe_unused]] this auto& self, UINT msg, WPARAM wparam,
-                                    LPARAM lparam) {
+    std::optional<LRESULT> handle_message([[maybe_unused]] this auto& self, UINT msg, WPARAM wparam,
+                                          LPARAM lparam) {
         if (msg == WM_COMMAND && lparam == 0)
             if constexpr (requires { self.on_command(LOWORD(wparam)); }) {
                 self.on_command(LOWORD(wparam));

@@ -91,13 +91,13 @@ result).
 - **Errors as `std::expected<T, std::error_code>`** at the public API; Win32 codes
   via `std::system_category()`. WIL stays for RAII handles only, not control flow.
 - **Message dispatch via composable compile-time mixins** (`mixins.hpp` +
-  `message_reflection.hpp` + `message_handler.hpp`); respelled from CRTP to
+  `message_reflection.hpp` + `message_dispatcher.hpp`); respelled from CRTP to
   C++23 **deducing this** on 2026-07-12 (see *Dispatch design review* below) —
-  mixins are plain structs whose `dispatch` deduces the final type through an
+  mixins are plain structs whose `handle_message` deduces the final type through an
   explicit object parameter (`this auto& self`).
   Seven empty-base mixins — `Lifecycle`, `Sizable`, `Commandable`, `Paintable`,
   `MouseInput`, `KeyboardInput`, `FocusAware` — each expose
-  `std::optional<LRESULT> handle(UINT, WPARAM, LPARAM)`: engaged = handled,
+  `std::optional<LRESULT> handle_message(UINT, WPARAM, LPARAM)`: engaged = handled,
   `nullopt` = pass on. `MessageDispatcher<Mixins...>` chains them via a fold
   expression (`||`), short-circuiting on first match, and its `dispatch_message`
   falls back to the derived type's `default_proc` when no mixin claims the
@@ -146,16 +146,20 @@ result).
     `requires` already ruled out C++17). Built delivery-mode by Claude; verified:
     clean MSVC `/W4` + ASan build, 16/16 tests pass.
     **MSVC gotcha (C7515):** the fold can't expand the pack inside a qualified
-    member access (`self.Mixins::handle(...)`) — worked around via a private
-    static `handle<Mixin>(self, ...)` helper (same name, deliberately), which
+    member access (`self.Mixins::handle_message(...)`) — worked around via a private
+    static `handle_message<Mixin>(self, ...)` helper (same name, deliberately), which
     expands the pack as a template argument instead. GCC/Clang accept the direct
     form; keep the helper for MSVC.
-    **Naming (2026-07-12, provisional):** engine = `MessageDispatcher` in
-    `message_dispatcher.hpp`, entry = `dispatch_message`, mixin member =
-    `handle`, shared match-and-fire = `handle_notification` — dispatchers
-    dispatch, handlers handle (Reactor-pattern vocabulary; Win32's own
-    `DispatchMessage`). Tommy wants this convention sanity-checked with a fresh
-    review before treating it as settled. *Probed on our toolchain (2026-07-12,
+    **Naming (settled 2026-07-12, fresh-eyes review):** engine = `MessageDispatcher`
+    in `message_dispatcher.hpp`, entry = `dispatch_message`, mixin member =
+    `handle_message`, shared match-and-fire = `handle_notification` — dispatchers
+    dispatch, handlers handle (Reactor vocabulary — ACE's `handle_*` members;
+    Win32's own `DispatchMessage`). One change from the provisional scheme: the
+    mixin member was bare `handle`, which gained the `_message` suffix — in a
+    Win32 wrapper `handle` is the domain's loaded *noun* (`Menu::handle()` is
+    already the raw-`HMENU` accessor, and an eventual `WindowHandle::handle()`
+    would collide on the very objects that carry the mixin member), and the
+    suffix restores the verb+object symmetry of its two siblings. *Probed on our toolchain (2026-07-12,
     MSVC 2022 BuildTools `/std:c++latest`): a prototype engine compiles and
     dispatches correctly, with one wart — MSVC rejects the pack in
     `self.Mixins::dispatch(...)` directly inside a fold (C7515); a small private
@@ -163,7 +167,7 @@ result).
   - **(c) Empirical layout note (probed 2026-07-12).** "Empty mixins → zero
     size" is false on MSVC by default: only the *first* empty base is folded
     away, so the 8-mixin list costs +8 bytes per window (measured 24 vs 16 with
-    `__declspec(empty_bases)` on `MessageHandler`). Harmless at our scale;
+    `__declspec(empty_bases)` on `MessageDispatcher`). Harmless at our scale;
     recorded in TECH_DEBT (fix or soften the mixins.hpp doc comment).
 - **Class-level config** (the `WNDCLASS`) is customized by a `configure_class`
   hook the derived type shadows — same CRTP mechanism as the `on_*` dispatch.

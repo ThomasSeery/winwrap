@@ -22,7 +22,7 @@ inline constexpr UINT wm_command_reflect = WM_APP + 0x1c00;
 /// @param handler  The callback to fire on a match; an unassigned one is skipped.
 /// @return         0 (handled) on a match, else std::nullopt to keep looking.
 inline std::optional<LRESULT> handle_notification(UINT msg, WPARAM wparam, WORD code,
-                                                    const std::function<void()>& handler) {
+                                                  const std::function<void()>& handler) {
     if (msg == wm_command_reflect && HIWORD(wparam) == code) {
         if (handler)
             handler();
@@ -40,7 +40,7 @@ inline std::optional<LRESULT> handle_notification(UINT msg, WPARAM wparam, WORD 
 /// @param fetch    A nullary callable that produces the payload; evaluated lazily.
 template <typename Handler, typename Fetch>
 std::optional<LRESULT> handle_notification(UINT msg, WPARAM wparam, WORD code,
-                                               const Handler& handler, Fetch fetch) {
+                                           const Handler& handler, Fetch fetch) {
     if (msg == wm_command_reflect && HIWORD(wparam) == code) {
         if (handler)
             handler(fetch());
@@ -58,7 +58,8 @@ std::optional<LRESULT> handle_notification(UINT msg, WPARAM wparam, WORD code,
 /// or another mixin matches `WM_COMMAND` -- one handler silently steals the other's
 /// messages. Keep the split exact.
 struct Reflecting {
-    [[nodiscard]] std::optional<LRESULT> handle(UINT msg, WPARAM wparam, LPARAM lparam) const {
+    [[nodiscard]] std::optional<LRESULT> handle_message(UINT msg, WPARAM wparam,
+                                                        LPARAM lparam) const {
         if (msg == WM_COMMAND)
             if (auto* child = reinterpret_cast<HWND>(lparam)) {
                 SendMessageW(child, wm_command_reflect, wparam, lparam);

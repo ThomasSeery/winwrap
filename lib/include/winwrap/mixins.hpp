@@ -1,11 +1,11 @@
 #pragma once
 
 /// Umbrella header for winwrap's mixins -- composable compile-time mixins (C++23
-/// deducing this: `handle` deduces the final type from its explicit object
+/// deducing this: `handle_message` deduces the final type from its explicit object
 /// parameter) that each route one family of window messages to a handler. Two kinds
 /// (see MIXINS.md): *hook* mixins detect an `on_*` method the final type defines
 /// (empty structs -> empty-base optimization, zero size); *callback* mixins own a
-/// `std::function` you assign (one function-object of state). Either way `handle`
+/// `std::function` you assign (one function-object of state). Either way `handle_message`
 /// returns an engaged optional (the LRESULT) when it handled the message, or
 /// `std::nullopt` to keep looking -- first match wins, so no message may appear in
 /// two mixins. No virtual dispatch in either case.

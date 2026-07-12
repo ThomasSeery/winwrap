@@ -1,9 +1,9 @@
-#include <catch2/catch_test_macros.hpp>
+#include "winwrap/controls/button.hpp"
 
+#include <catch2/catch_test_macros.hpp>
 #include <memory>
 #include <utility>
 
-#include "winwrap/controls/button.hpp"
 #include "winwrap/window.hpp"
 
 namespace {
@@ -28,7 +28,8 @@ TEST_CASE("Clickable fires on_click on a reflected BN_CLICKED") {
     bool clicked = false;
     fix.on_click = [&] { clicked = true; };
 
-    const auto handled = fix.handle(winwrap::wm_command_reflect, MAKEWPARAM(0, BN_CLICKED), 0);
+    const auto handled =
+        fix.handle_message(winwrap::wm_command_reflect, MAKEWPARAM(0, BN_CLICKED), 0);
 
     REQUIRE(clicked);
     REQUIRE(handled == 0);
@@ -39,15 +40,15 @@ TEST_CASE("Clickable ignores messages that are not a reflected click") {
     bool clicked = false;
     fix.on_click = [&] { clicked = true; };
 
-    REQUIRE_FALSE(fix.handle(WM_PAINT, 0, 0).has_value());          // wrong message
-    REQUIRE_FALSE(fix.handle(winwrap::wm_command_reflect, MAKEWPARAM(0, BN_SETFOCUS), 0)
-                      .has_value());                                  // wrong notification
+    REQUIRE_FALSE(fix.handle_message(WM_PAINT, 0, 0).has_value());  // wrong message
+    REQUIRE_FALSE(fix.handle_message(winwrap::wm_command_reflect, MAKEWPARAM(0, BN_SETFOCUS), 0)
+                      .has_value());  // wrong notification
     REQUIRE_FALSE(clicked);
 }
 
 TEST_CASE("Clickable with no handler swallows the click without crashing") {
     ClickableFixture fix;  // on_click left unassigned
-    REQUIRE(fix.handle(winwrap::wm_command_reflect, MAKEWPARAM(0, BN_CLICKED), 0) == 0);
+    REQUIRE(fix.handle_message(winwrap::wm_command_reflect, MAKEWPARAM(0, BN_CLICKED), 0) == 0);
 }
 
 TEST_CASE("Button::create(cfg, handler) wires on_click in one call") {

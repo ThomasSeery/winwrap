@@ -13,8 +13,8 @@ plumbing" goal), `lib/include/winwrap/mixins.hpp` (the mixins) and
 ## The two kinds of message mixin
 
 Both are plain structs composed by the same compile-time fold (`MessageDispatcher`), both
-add no vtable. A mixin whose `handle` needs the final type takes it as an explicit
-object parameter — `handle(this auto& self, …)`, C++23 **deducing this** — so `self`
+add no vtable. A mixin whose `handle_message` needs the final type takes it as an explicit
+object parameter — `handle_message(this auto& self, …)`, C++23 **deducing this** — so `self`
 *is* the composed window/control, deduced at each call site. (The classic spelling of
 this composition in the literature is **variadic CRTP** — winwrap used it until
 2026-07; search that, "CRTP", or "C++ mixin" for the talks/articles, and see ROADMAP →
@@ -47,7 +47,7 @@ mixin reflects *every* control, so **adding a mixin never touches the parent.**
    ```cpp
    struct TextChangeable {
        std::function<void()> on_text_changed;     ///< assign your handler
-       [[nodiscard]] std::optional<LRESULT> handle(UINT msg, WPARAM wparam, LPARAM) const {
+       [[nodiscard]] std::optional<LRESULT> handle_message(UINT msg, WPARAM wparam, LPARAM) const {
            return handle_notification(msg, wparam, EN_CHANGE, on_text_changed);
        }
    };
@@ -70,16 +70,16 @@ wire on the window side.
 
 Some notifications carry data that **isn't in the message** — `CBN_SELCHANGE` says
 "the selection changed" but not *to what*; the index lives in the control. Use the
-payload overload of `dispatch_notification`, which takes a **`fetch`** callable run
+payload overload of `handle_notification`, which takes a **`fetch`** callable run
 *only after* the code matches (so the control is queried solely when the notification
 actually fired). The fetch needs the control's `hwnd()`, so this is the one control
-mixin whose `handle` needs the object — it takes `this auto& self` and the lambda
+mixin whose `handle_message` needs the object — it takes `this auto& self` and the lambda
 captures it by reference (safe: the fetch runs synchronously inside the handler):
 
 ```cpp
 struct SelectionChangeable {
     std::function<void(int)> on_selection_changed;  ///< gets the new index
-    std::optional<LRESULT> handle(this auto& self, UINT msg, WPARAM wparam, LPARAM) {
+    std::optional<LRESULT> handle_message(this auto& self, UINT msg, WPARAM wparam, LPARAM) {
         return handle_notification(msg, wparam, CBN_SELCHANGE, self.on_selection_changed,
             [&self] { return static_cast<int>(SendMessageW(self.hwnd(), CB_GETCURSEL, 0, 0)); });
     }
@@ -98,7 +98,7 @@ code on the derived window type. `FileDroppable` is the worked example.
 
    ```cpp
    struct FileDroppable {
-       std::optional<LRESULT> handle([[maybe_unused]] this auto& self, UINT msg, WPARAM wparam,
+       std::optional<LRESULT> handle_message([[maybe_unused]] this auto& self, UINT msg, WPARAM wparam,
                                      LPARAM) {
            switch (msg) {
                WW_CASE(WM_DROPFILES,
@@ -126,7 +126,7 @@ Rules specific to window mixins:
 
 - **Extras run after the built-ins** (first-match-wins), so an extra can never
   steal a message a built-in hook handles. To intercept one anyway, shadow
-  `handle_message` — explicit beats positional.
+  `dispatch_message` — explicit beats positional.
 - **A built-in only claims a message when its hook is defined** — an extra
   matching a built-in's message would fire only on windows that *don't* define
   that built-in hook. Don't rely on that; keep the one-message-one-mixin

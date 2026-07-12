@@ -3,12 +3,11 @@
 #include "winwrap/win.hpp"
 
 #include <shellapi.h>
+#include <wil/resource.h>
 
 #include <optional>
 #include <string>
 #include <vector>
-
-#include <wil/resource.h>
 
 namespace winwrap {
 
@@ -41,8 +40,8 @@ inline std::vector<std::wstring> make_dropped_paths(HDROP drop) {
 /// @note An elevated process receives no drops from a non-elevated Explorer
 ///       (UIPI filters WM_DROPFILES).
 struct FileDroppable {
-    std::optional<LRESULT> handle([[maybe_unused]] this auto& self, UINT msg, WPARAM wparam,
-                                    LPARAM) {
+    std::optional<LRESULT> handle_message([[maybe_unused]] this auto& self, UINT msg, WPARAM wparam,
+                                          LPARAM) {
         switch (msg) {
             WW_CASE(WM_DROPFILES,
                     self.on_files_dropped(make_dropped_paths(reinterpret_cast<HDROP>(wparam))));

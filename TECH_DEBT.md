@@ -48,7 +48,7 @@ its place.
 - **`return 0` ceiling** — `WW_CASE` hard-codes `return 0` for every handled message, so a
   hook can't return a meaningful `LRESULT`. Fine for the current fire-and-forget set;
   **revisit when `WM_NOTIFY` / `WM_CTLCOLOR*` land** — either extend `WW_CASE` to carry a
-  return value, or route those few messages via the shadow-`handle_message` escape hatch.
+  return value, or route those few messages via the shadow-`dispatch_message` escape hatch.
 - **Public `on_*` hooks** *(accepted; won't-fix)* — handlers must be `public` because the
   mixin calls them from a different class. Making them private costs friend declarations
   or an accessor shim; not worth it at this scale. Recorded so it isn't relitigated.
