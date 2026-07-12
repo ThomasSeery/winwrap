@@ -5,6 +5,15 @@ about, and chosen not to act on yet. Each item says what it is, why it's parked,
 what resolving it would involve. Design rationale lives in [VISION.md](VISION.md); the
 work queue in [ROADMAP.md](ROADMAP.md). This file is only the "we know, not now" list.
 
+## Map lookup idiom — `find` / `!= end()` noise
+
+`Menu::show` uses the iterator idiom (`if (auto it = m.find(k); it != m.end())`) —
+one hash lookup, but noisy; the iterator-free spelling (`contains` + `at`, C++20)
+costs a second lookup, and C++23 still has no optional-returning map get. **Parked:**
+one call site doesn't justify a helper. **Resolve when** the idiom hits its second
+real consumer (CODE_CONVENTIONS §3 trigger): add a tiny `try_find` returning a
+pointer-to-value (`nullptr` = absent) in a concept-named shared header.
+
 ## Umbrella headers (`controls.hpp`, `mixins.hpp`) — convenience only; decide keep-vs-drop
 
 `controls.hpp` and `mixins.hpp` contain **no code** — no shared macro, no shared

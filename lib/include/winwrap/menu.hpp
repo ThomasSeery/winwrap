@@ -5,8 +5,8 @@
 #include <expected>
 #include <functional>
 #include <system_error>
+#include <unordered_map>
 #include <utility>
-#include <vector>
 
 #include <wil/resource.h>
 
@@ -44,14 +44,14 @@ public:
     [[nodiscard]] HMENU handle() const { return handle_.get(); }
 
 private:
-    // Handler-item ids are sequential from first_handler_id, so handlers_[n]
-    // belongs to id first_handler_id + n. User ids stay below.
+    // Handler-item ids are auto-assigned from first_handler_id up; user ids stay below.
     static constexpr UINT first_handler_id{0xE000};
 
     explicit Menu(wil::unique_hmenu handle) : handle_{std::move(handle)} {}
 
     wil::unique_hmenu handle_;
-    std::vector<std::function<void()>> handlers_;
+    std::unordered_map<UINT, std::function<void()>> handlers_;
+    UINT next_id_{first_handler_id};
 };
 
 }  // namespace winwrap

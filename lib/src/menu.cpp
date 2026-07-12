@@ -14,9 +14,8 @@ std::expected<void, std::error_code> Menu::add_item(UINT id, const wchar_t* text
 
 std::expected<void, std::error_code> Menu::add_item(const wchar_t* text,
                                                     std::function<void()> handler) {
-    const UINT id = first_handler_id + static_cast<UINT>(handlers_.size());
-    return checked(AppendMenuW(handle_.get(), MF_STRING, id, text)).transform([&] {
-        handlers_.push_back(std::move(handler));
+    return checked(AppendMenuW(handle_.get(), MF_STRING, next_id_, text)).transform([&] {
+        handlers_.emplace(next_id_++, std::move(handler));
     });
 }
 
@@ -30,10 +29,10 @@ void Menu::show(HWND owner) {
     PostMessageW(owner, WM_NULL, 0, 0);
     if (picked == 0)
         return;
-    if (picked >= first_handler_id && picked - first_handler_id < handlers_.size()) {
+    if (auto it = handlers_.find(picked); it != handlers_.end()) {
         // Copy first: the handler may do anything, including tearing down the
         // window that owns this menu -- the copy outlives us either way.
-        auto handler = handlers_[picked - first_handler_id];
+        auto handler = it->second;
         handler();
         return;
     }

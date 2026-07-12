@@ -182,8 +182,10 @@ Delivered in `lib/include/winwrap/menu.hpp` + `lib/src/menu.cpp`:
 - **Click routing (revised + implemented 2026-07-12):** per-item callbacks fired
   from `show` via `TPM_RETURNCMD` (see *Decisions locked → Menu routing*); the
   legacy `add_item(id, text)` → posted `WM_COMMAND` → `on_command(id)` path
-  remains. Handlers are stored in a `std::vector` indexed by `id - 0xE000` (ids
-  are sequential, so no map needed).
+  remains. Handlers live in an id-keyed `std::unordered_map` — robust to future
+  `remove_item`/`insert_item` (a vector-by-index store was tried and reverted:
+  it silently depended on ids staying dense and append-only). Lookup uses the
+  `find`/`end()` idiom; a `try_find` wrapper is a future nicety (see TECH_DEBT).
 
 Builds clean, clang-tidy-clean. **Not yet exercised** by an example — wire a `Menu`
 into a window (right-click → `show()` → `on_command`); wifi-toggle will cover it.
