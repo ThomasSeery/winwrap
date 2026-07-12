@@ -43,9 +43,10 @@ Close these before or while wiring — wifi-toggle needs each one:
    helper is additive later, growing toward accelerators / modeless-dialog /
    idle handling only if ever needed (WinLamb `RUN()`, Win32++ `CWinApp::Run`,
    WTL `CMessageLoop` are the precedents).
-4. **Per-item menu callbacks** — elected for v0.1 (ergonomics, not strictly
-   blocking): kills the `on_command` id switch in the app. Design settled — see
-   *Decisions locked → Menu routing (revised)* and MENU_CALLBACKS_PROMPT.md.
+4. ~~**Per-item menu callbacks**~~ — ✅ **Done (2026-07-12).** `add_item(text,
+   handler)` + `TPM_RETURNCMD` show; see *Decisions locked → Menu routing
+   (revised)*. Remaining acceptance check (from the design task): the wifi-toggle
+   window ends up with zero menu ids, zero `switch`, zero `on_command`.
 
 Non-gaps confirmed by the survey: `NotifyIcon` already exceeds every surveyed
 library (v4 protocol + TaskbarCreated re-add; Win32++'s tray sample is legacy-v0
@@ -61,9 +62,11 @@ result).
   `on_*` message hooks** (see *Decisions locked → Message dispatch*). Runs on screen
   via `hello-window`. Builds clean (MSVC `/W4`), clang-tidy-clean, Doxygen-documented.
 - **`Menu`** — ✅ **Done.** `class Menu final`; `create()` factory →
-  `std::expected<Menu, std::error_code>`; `add_item` / `show` / `handle()`; owns its
-  `HMENU` via `wil::unique_hmenu` (move-only). `show` posts `WM_COMMAND` → owner's
-  `on_command`. Builds clean, clang-tidy-clean.
+  `std::expected<Menu, std::error_code>`; `add_item(id, text)` /
+  `add_item(text, handler)` / `show` / `handle()`; owns its `HMENU` via
+  `wil::unique_hmenu` (move-only). `show` (`TPM_RETURNCMD`) fires a handler item's
+  callback directly; an id item is re-posted as `WM_COMMAND` → owner's
+  `on_command`. Builds clean, tests pass.
 - **`NotifyIcon`** — ✅ **Done.** Move-only RAII wrapper over `Shell_NotifyIcon`,
   targeting `NOTIFYICON_VERSION_4`. `create(NotifyIconConfig)` → `std::expected`;
   `add()` (initial add + `WM_TASKBARCREATED` re-add), `set_tooltip`, static
@@ -176,10 +179,11 @@ Delivered in `lib/include/winwrap/menu.hpp` + `lib/src/menu.cpp`:
   `TrackPopupMenuEx` (no `TPM_RETURNCMD`) + `PostMessageW(owner, WM_NULL, 0, 0)`
   (both `TrackPopupMenu` gotchas).
 - **`handle()`** — non-owning `HMENU` accessor (escape hatch).
-- **Click routing (revised 2026-07-12):** per-item callbacks fired from `show` via
-  `TPM_RETURNCMD` (see *Decisions locked → Menu routing*); the legacy
-  `add_item(id, text)` → posted `WM_COMMAND` → `on_command(id)` path remains.
-  Implementation pending (see MENU_CALLBACKS_PROMPT.md).
+- **Click routing (revised + implemented 2026-07-12):** per-item callbacks fired
+  from `show` via `TPM_RETURNCMD` (see *Decisions locked → Menu routing*); the
+  legacy `add_item(id, text)` → posted `WM_COMMAND` → `on_command(id)` path
+  remains. Handlers are stored in a `std::vector` indexed by `id - 0xE000` (ids
+  are sequential, so no map needed).
 
 Builds clean, clang-tidy-clean. **Not yet exercised** by an example — wire a `Menu`
 into a window (right-click → `show()` → `on_command`); wifi-toggle will cover it.
