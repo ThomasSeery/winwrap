@@ -24,7 +24,7 @@ vs `controls.hpp` (catalog) one-letter difference is a readability trap.
 **Resolution options:** (a) keep as-is — cheap, harmless if unused; (b) delete both and
 require consumers to include the specific control/mixin they use — fits the "thin,
 pay-for-what-you-include" pillar better. **Status:** parked. Decide at the first real
-external consumer (`tray_app` / wifi-toggle), when usage shows whether one-include earns
+external consumer (wifi-toggle), when usage shows whether one-include earns
 its place.
 
 ## Message dispatch — known edges (from the CRTP mixin review)

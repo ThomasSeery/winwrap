@@ -53,8 +53,10 @@ std::optional<LRESULT> dispatch_notification(UINT msg, WPARAM wparam, WORD code,
 /// notification down to the control that sent it (lparam carries the control HWND), so
 /// the control can handle its own events via its mixins (see Clickable). Generic
 /// over every control -- one mixin reflects them all; `WM_NOTIFY` joins here when it lands.
-/// INVARIANT: Reflecting and Commandable partition `WM_COMMAND` on lparam (!= 0 here,
-/// == 0 there); the split must stay disjoint -- a third `WM_COMMAND` handler would break it.
+/// Reflecting and Commandable split `WM_COMMAND` between them by lparam (!= 0 here,
+/// == 0 there). Dispatch is first-match-wins, so if these conditions ever overlap --
+/// or another mixin matches `WM_COMMAND` -- one handler silently steals the other's
+/// messages. Keep the split exact.
 template <typename Derived>
 struct Reflecting {
     std::optional<LRESULT> dispatch(UINT msg, WPARAM wparam, LPARAM lparam) {

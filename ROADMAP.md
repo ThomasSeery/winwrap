@@ -20,10 +20,35 @@ composing through the `on_*` hooks. Design is locked (see *Decisions locked* →
    local include path (`Window` is header-only). Currently uncommitted (throwaway).
 2. ~~Task 2 — `Menu`~~ — ✅ **Done** (see Task 2 below).
 3. ~~Task 3 — `NotifyIcon`~~ — ✅ **Done** (implemented; not yet exercised — see Task 3).
-4. **`tray_app`** (standalone, like hello-window) — window + tray + menu
-   end-to-end. The wifi-toggle shape minus the wifi logic. ← **next in the v0.1 track** (after v0.2 Controls)
-5. **Wire into wifi-toggle** — swap its hand-rolled Win32 for winwrap.
-6. **Tag `v0.1`** — so wifi-toggle pins a tag (no surprise BC).
+4. **Wire into wifi-toggle** — swap its hand-rolled Win32 for winwrap. This is
+   also the first on-screen exercise of `NotifyIcon` + `Menu` (the earlier
+   standalone `tray_app` step is dropped — wifi-toggle *is* the exercise app). ← **next**
+5. **Tag `v0.1`** — so wifi-toggle pins a tag (no surprise BC).
+
+### wifi-toggle readiness gaps (2026-07-12 comparison vs WinLamb / Win32++ / WTL / WIL)
+
+Close these before or while wiring — wifi-toggle needs each one:
+
+1. **`NotifyIcon::set_icon`** *(blocking — the status recolor is the app's core
+   feature)*. `NIM_MODIFY` with `uFlags = NIF_ICON`; identity = the original
+   `(hWnd, uID)` from `NIM_ADD`; the shell does **not** take ownership of the
+   `HICON`, so swap the owned `wil::unique_hicon` member only after the call
+   succeeds. No `NIM_SETVERSION` re-send needed after a modify.
+2. **`on_timer(id)` hook** — a `Timable` mixin (`WM_TIMER`, id = `wparam`) per the
+   `MIXINS.md` recipe, for the status poll. Precedent: WTL's `MSG_WM_TIMER` →
+   `OnTimer(UINT_PTR)`; no surveyed library wraps `SetTimer`/`KillTimer` beyond
+   raw members, so the app keeps calling those (an RAII guard is additive later).
+3. **Message loop** — stays app-side for the MVP (Microsoft's own NotificationIcon
+   sample uses a plain `GetMessage` loop); a `run_message_loop()` free-function
+   helper is additive later, growing toward accelerators / modeless-dialog /
+   idle handling only if ever needed (WinLamb `RUN()`, Win32++ `CWinApp::Run`,
+   WTL `CMessageLoop` are the precedents).
+
+Non-gaps confirmed by the survey: `NotifyIcon` already exceeds every surveyed
+library (v4 protocol + TaskbarCreated re-add; Win32++'s tray sample is legacy-v0
+with neither, WTL/WinLamb have no tray support at all), and drawing the red/green
+`HICON` itself is app-side GDI by design (`CreateIconIndirect`; winwrap adopts the
+result).
 
 ## Current state (v0.1)
 
@@ -144,7 +169,7 @@ Delivered in `lib/include/winwrap/menu.hpp` + `lib/src/menu.cpp`:
 - **Click routing (LOCKED):** `show` posts `WM_COMMAND` → owner's `on_command(id)`.
 
 Builds clean, clang-tidy-clean. **Not yet exercised** by an example — wire a `Menu`
-into a window (right-click → `show()` → `on_command`); the tray app will cover it.
+into a window (right-click → `show()` → `on_command`); wifi-toggle will cover it.
 
 ## Task 3 — `NotifyIcon`: the differentiator — ✅ DONE
 
@@ -160,7 +185,7 @@ Delivered in `lib/include/winwrap/notify_icon.hpp` + `lib/src/notify_icon.cpp`:
 - **`NotifyIconConfig`** struct + designated initializers (kills swappable
   same-typed params; mirrors `WindowConfig`).
 - Builds clean (`/W4` + sanitizers), clang-tidy-clean.
-- **Not yet exercised** — `tray_app` will wire it into a window's `handle_message`
+- **Not yet exercised** — wifi-toggle will wire it into a window's `handle_message`
   (decode the v4 event from `LOWORD(lParam)`) + a `Menu`.
 
 **LOCKED design:** attaches to a `Window<T>` (takes its `HWND` + callback message
@@ -181,8 +206,8 @@ id); lives as a member of the derived window, created in `on_created()`; targets
 
 ## Post-v0.1 roadmap
 
-Once v0.1 ships (Window + Menu + NotifyIcon + a `tray_app`, wired into wifi-toggle
-and tagged), here's the planned order. **None of this blocks v0.1.**
+Once v0.1 ships (Window + Menu + NotifyIcon, wired into wifi-toggle and tagged),
+here's the planned order. **None of this blocks v0.1.**
 
 ### v0.2 — Controls (`Control<T>` — the CRTP control base)
 
@@ -190,7 +215,7 @@ and tagged), here's the planned order. **None of this blocks v0.1.**
 > via `tests/control_test.cpp`). Remaining: exercise it on screen.
 
 > **Not gated behind v0.1.** Controls is library work, independent of the v0.1 app
-> track (`tray_app` → wifi-toggle → tag): no shared code, nothing extra to link, so
+> track (wifi-toggle → tag): no shared code, nothing extra to link, so
 > it can be built first. Order by priority, not dependency.
 
 The headline post-MVP feature: `Control<T>`, a CRTP base for native child controls
