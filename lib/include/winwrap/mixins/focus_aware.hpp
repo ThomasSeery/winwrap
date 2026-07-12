@@ -6,15 +6,13 @@
 
 namespace winwrap {
 
-/// Routes `WM_SETFOCUS` / `WM_KILLFOCUS` to `Derived::on_focus(gained)` -- true on
-/// gain, false on loss.
-template <typename Derived>
+/// Routes `WM_SETFOCUS` / `WM_KILLFOCUS` to the final type's `on_focus(gained)` --
+/// true on gain, false on loss.
 struct FocusAware {
-    std::optional<LRESULT> dispatch(UINT msg, WPARAM, LPARAM) {
-        [[maybe_unused]] auto* self = static_cast<Derived*>(this);
+    std::optional<LRESULT> handle([[maybe_unused]] this auto& self, UINT msg, WPARAM, LPARAM) {
         switch (msg) {
-            WW_CASE(WM_SETFOCUS, self->on_focus(true));
-            WW_CASE(WM_KILLFOCUS, self->on_focus(false));
+            WW_CASE(WM_SETFOCUS, self.on_focus(true));
+            WW_CASE(WM_KILLFOCUS, self.on_focus(false));
             default:
                 break;
         }

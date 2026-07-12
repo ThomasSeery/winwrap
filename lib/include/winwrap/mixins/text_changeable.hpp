@@ -14,14 +14,12 @@ namespace winwrap {
 /// via `class C : Control<C, TextChangeable>`. The callback is `void()`, not
 /// `void(text)`: `EN_CHANGE` carries no text, and reading it on every keystroke would
 /// allocate needlessly -- pull the current value with `control.text()` inside the
-/// handler when you actually want it. The template parameter is unused (composition
-/// only); an unassigned `on_text_changed` is skipped.
-template <typename>
+/// handler when you actually want it. An unassigned `on_text_changed` is skipped.
 struct TextChangeable {
     std::function<void()> on_text_changed;  ///< Assign your handler; unset = nothing happens.
 
-    std::optional<LRESULT> dispatch(UINT msg, WPARAM wparam, LPARAM) {
-        return dispatch_notification(msg, wparam, EN_CHANGE, on_text_changed);
+    [[nodiscard]] std::optional<LRESULT> handle(UINT msg, WPARAM wparam, LPARAM) const {
+        return handle_notification(msg, wparam, EN_CHANGE, on_text_changed);
     }
 };
 

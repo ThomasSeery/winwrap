@@ -8,7 +8,7 @@
 #include <memory>
 #include <system_error>
 
-#include "winwrap/message_handler.hpp"
+#include "winwrap/message_dispatcher.hpp"
 #include "winwrap/error.hpp"
 #include "winwrap/mixins.hpp"
 #include "winwrap/window_handle.hpp"
@@ -52,17 +52,17 @@ struct ControlConfig {
 ///     The owner window's Reflecting mixin bounces the notification down so it lands
 ///     here. Adding one is mechanical -- see MIXINS.md.
 ///
-/// Shadow handle_message in T for anything the mixins don't cover, and delegate the
-/// rest with `Control::handle_message`.
+/// Shadow dispatch_message in T for anything the mixins don't cover, and delegate the
+/// rest with `Control::dispatch_message`.
 ///
 /// @tparam T           The derived control type. Must provide
 ///                     `static constexpr const wchar_t* control_class` and be
 ///                     default-constructible.
 /// @tparam Mixins  Notification mixins to compose (e.g. Clickable).
-template <typename T, template <typename> typename... Mixins>
+template <typename T, typename... Mixins>
 class Control
     : public WindowHandle,
-      public MessageHandler<T, Paintable, MouseInput, KeyboardInput, FocusAware, Mixins...> {
+      public MessageDispatcher<Paintable, MouseInput, KeyboardInput, FocusAware, Mixins...> {
 public:
     Control(const Control&) = delete;
     Control& operator=(const Control&) = delete;
@@ -86,7 +86,7 @@ public:
     [[nodiscard]] UINT id() const { return id_; }
 
     /// The message fallback: hands any message no hook claimed to DefSubclassProc.
-    /// Called by handle_message (inherited from MessageHandler); not for direct use.
+    /// Called by dispatch_message (inherited from MessageDispatcher); not for direct use.
     LRESULT default_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
         return DefSubclassProc(hwnd(), msg, wparam, lparam);
     }
@@ -123,7 +123,7 @@ private:
     static LRESULT CALLBACK subclass_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam,
                                           UINT_PTR /*id_subclass*/, DWORD_PTR ref_data) {
         T* self = reinterpret_cast<T*>(ref_data);
-        LRESULT result = self->handle_message(msg, wparam, lparam);
+        LRESULT result = self->dispatch_message(msg, wparam, lparam);
         if (msg == WM_NCDESTROY) {
             // The HWND is going away -- detach our proc and sever the dangling
             // pointer so the dtor won't RemoveWindowSubclass a dead handle.

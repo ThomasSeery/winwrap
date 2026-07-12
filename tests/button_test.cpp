@@ -8,7 +8,7 @@
 
 namespace {
 // Bare carrier for the Clickable mixin, to exercise it without a live control.
-struct ClickableFixture : winwrap::Clickable<ClickableFixture> {};
+struct ClickableFixture : winwrap::Clickable {};
 
 // A host window that owns a button, so the full parent -> reflect -> control path
 // can run for real.
@@ -28,7 +28,7 @@ TEST_CASE("Clickable fires on_click on a reflected BN_CLICKED") {
     bool clicked = false;
     fix.on_click = [&] { clicked = true; };
 
-    const auto handled = fix.dispatch(winwrap::wm_command_reflect, MAKEWPARAM(0, BN_CLICKED), 0);
+    const auto handled = fix.handle(winwrap::wm_command_reflect, MAKEWPARAM(0, BN_CLICKED), 0);
 
     REQUIRE(clicked);
     REQUIRE(handled == 0);
@@ -39,15 +39,15 @@ TEST_CASE("Clickable ignores messages that are not a reflected click") {
     bool clicked = false;
     fix.on_click = [&] { clicked = true; };
 
-    REQUIRE_FALSE(fix.dispatch(WM_PAINT, 0, 0).has_value());          // wrong message
-    REQUIRE_FALSE(fix.dispatch(winwrap::wm_command_reflect, MAKEWPARAM(0, BN_SETFOCUS), 0)
+    REQUIRE_FALSE(fix.handle(WM_PAINT, 0, 0).has_value());          // wrong message
+    REQUIRE_FALSE(fix.handle(winwrap::wm_command_reflect, MAKEWPARAM(0, BN_SETFOCUS), 0)
                       .has_value());                                  // wrong notification
     REQUIRE_FALSE(clicked);
 }
 
 TEST_CASE("Clickable with no handler swallows the click without crashing") {
     ClickableFixture fix;  // on_click left unassigned
-    REQUIRE(fix.dispatch(winwrap::wm_command_reflect, MAKEWPARAM(0, BN_CLICKED), 0) == 0);
+    REQUIRE(fix.handle(winwrap::wm_command_reflect, MAKEWPARAM(0, BN_CLICKED), 0) == 0);
 }
 
 TEST_CASE("Button::create(cfg, handler) wires on_click in one call") {

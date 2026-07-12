@@ -14,14 +14,14 @@ namespace winwrap {
 /// message space of the controls it subclasses.
 inline constexpr UINT wm_command_reflect = WM_APP + 0x1c00;
 
-/// The shared "reflected `WM_COMMAND` -> callback" dispatch, written once for every
-/// control notification mixin to build on. If `msg` is the reflected command and
-/// its notification code is `code`, fire `handler` (when assigned) and report the
+/// The shared "reflected `WM_COMMAND` -> callback" match-and-fire, written once for
+/// every control notification mixin to build on. If `msg` is the reflected command
+/// and its notification code is `code`, fire `handler` (when assigned) and report the
 /// message handled; otherwise pass. (See the mixins in <winwrap/mixins.hpp>.)
 /// @param code     The control notification code to match (`BN_CLICKED`, `EN_CHANGE`, ...).
 /// @param handler  The callback to fire on a match; an unassigned one is skipped.
 /// @return         0 (handled) on a match, else std::nullopt to keep looking.
-inline std::optional<LRESULT> dispatch_notification(UINT msg, WPARAM wparam, WORD code,
+inline std::optional<LRESULT> handle_notification(UINT msg, WPARAM wparam, WORD code,
                                                     const std::function<void()>& handler) {
     if (msg == wm_command_reflect && HIWORD(wparam) == code) {
         if (handler)
@@ -39,8 +39,8 @@ inline std::optional<LRESULT> dispatch_notification(UINT msg, WPARAM wparam, WOR
 /// @param handler  A callback taking the payload (e.g. std::function<void(int)>).
 /// @param fetch    A nullary callable that produces the payload; evaluated lazily.
 template <typename Handler, typename Fetch>
-std::optional<LRESULT> dispatch_notification(UINT msg, WPARAM wparam, WORD code,
-                                             const Handler& handler, Fetch fetch) {
+std::optional<LRESULT> handle_notification(UINT msg, WPARAM wparam, WORD code,
+                                               const Handler& handler, Fetch fetch) {
     if (msg == wm_command_reflect && HIWORD(wparam) == code) {
         if (handler)
             handler(fetch());
@@ -57,9 +57,8 @@ std::optional<LRESULT> dispatch_notification(UINT msg, WPARAM wparam, WORD code,
 /// == 0 there). Dispatch is first-match-wins, so if these conditions ever overlap --
 /// or another mixin matches `WM_COMMAND` -- one handler silently steals the other's
 /// messages. Keep the split exact.
-template <typename Derived>
 struct Reflecting {
-    std::optional<LRESULT> dispatch(UINT msg, WPARAM wparam, LPARAM lparam) {
+    [[nodiscard]] std::optional<LRESULT> handle(UINT msg, WPARAM wparam, LPARAM lparam) const {
         if (msg == WM_COMMAND)
             if (auto* child = reinterpret_cast<HWND>(lparam)) {
                 SendMessageW(child, wm_command_reflect, wparam, lparam);

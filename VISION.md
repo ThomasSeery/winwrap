@@ -16,10 +16,12 @@ the way Qt / wxWidgets / GTK do.
 1. **Native Win32, never a framework.** Every wrapper exposes the raw handle and
    you can always drop to plain Win32. winwrap adds ergonomics; it never hides
    the platform or locks you in.
-2. **Zero-overhead dispatch via CRTP.** Window message routing resolves at
-   compile time — `static_cast<T*>` + `if constexpr`/`requires` detection of named
-   `on_*` hooks the derived window defines — no vtables, no virtual hierarchy, no
-   macro message maps. You write only the `on_*` handlers you need.
+2. **Zero-overhead dispatch, resolved at compile time.** Window message routing
+   is composed mixins + `if constexpr`/`requires` detection of named `on_*` hooks
+   the derived window defines, with the final type deduced via C++23 *deducing
+   this* (the CRTP idea, respelled without the `Derived` parameter) — no vtables,
+   no virtual hierarchy, no macro message maps. You write only the `on_*`
+   handlers you need.
 3. **Low / zero dependencies.** Header-only WIL for RAII handles, and nothing
    else. No multi-megabyte runtime to ship next to a tray utility.
 4. **RAII over every resource.** Handles are owned by wrappers — WIL's
@@ -63,7 +65,7 @@ framework. None of the window frameworks use CRTP either.
 | LFWin32          | yes         | low             | signal-slot (no vtables) | no     |
 | ATL `CWindowImpl`| yes         | ATL framework   | CRTP **+ macro maps** | no        |
 | zserge/tray, traypp, CTrayNotifyIcon | — | varies | callbacks    | yes, but no window framework |
-| **winwrap**      | **yes**     | **WIL only**    | **CRTP (compile-time)** | **yes** |
+| **winwrap**      | **yes**     | **WIL only**    | **compile-time mixins (deducing this)** | **yes** |
 
 The closest existing thing — ATL's `CWindowImpl` plus a third-party tray class —
 drags in the ATL framework, macro message maps, and a dated API, and still

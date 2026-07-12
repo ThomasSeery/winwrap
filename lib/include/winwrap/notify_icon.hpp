@@ -15,7 +15,7 @@ namespace winwrap {
 /// Settings passed to NotifyIcon::create -- the Shell_NotifyIcon parameters, set with
 /// designated initializers; omitted fields take the defaults.
 struct NotifyIconConfig {
-    HWND owner{};                ///< Window tray events post to (its handle_message).
+    HWND owner{};                ///< Window tray events post to (its dispatch_message).
     UINT callback_msg{};         ///< App message id the events arrive as; use `WM_APP + n`.
     UINT id{};                   ///< Identifies this icon within the owner.
     HICON icon{};                ///< Adopted -- must be safe to DestroyIcon (not a shared system icon).
@@ -27,7 +27,7 @@ struct NotifyIconConfig {
 /// plus an app-private callback message id (use `WM_APP + n`).
 ///
 /// Tray events arrive at the owner window as that callback message. Targeting
-/// `NOTIFYICON_VERSION_4`, decode them in the owner's handle_message: the event is
+/// `NOTIFYICON_VERSION_4`, decode them in the owner's dispatch_message: the event is
 /// `LOWORD(lParam)` (e.g. `WM_CONTEXTMENU` on right-click, `NIN_SELECT` on left-click)
 /// and the icon id is `HIWORD(lParam)`. On destruction the icon is removed.
 class NotifyIcon final {
@@ -51,7 +51,7 @@ public:
     std::expected<void, std::error_code> add();
 
     /// The "TaskbarCreated" broadcast id Explorer sends after it restarts. Compare
-    /// against it in the owner's handle_message, then call add().
+    /// against it in the owner's dispatch_message, then call add().
     [[nodiscard]] static UINT taskbar_created_message();
 
 private:

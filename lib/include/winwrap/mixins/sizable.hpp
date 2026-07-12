@@ -6,13 +6,13 @@
 
 namespace winwrap {
 
-/// Routes `WM_SIZE` to `Derived::on_size(width, height)` (client area, from lparam).
-template <typename Derived>
+/// Routes `WM_SIZE` to the final type's `on_size(width, height)` (client area,
+/// from lparam).
 struct Sizable {
-    std::optional<LRESULT> dispatch(UINT msg, WPARAM, LPARAM lparam) {
-        [[maybe_unused]] auto* self = static_cast<Derived*>(this);
+    std::optional<LRESULT> handle([[maybe_unused]] this auto& self, UINT msg, WPARAM,
+                                    LPARAM lparam) {
         switch (msg) {
-            WW_CASE(WM_SIZE, self->on_size(LOWORD(lparam), HIWORD(lparam)));
+            WW_CASE(WM_SIZE, self.on_size(LOWORD(lparam), HIWORD(lparam)));
             default:
                 break;
         }

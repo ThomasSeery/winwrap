@@ -10,6 +10,9 @@
 #  named-parameter -- trait dispatch signatures are uniform so the Dispatcher fold
 #  can call them alike; a trait that ignores wparam/lparam leaves them unnamed,
 #  which trips this check -- but naming them trips MSVC C4100, so the compiler wins.
+#  convert-member-functions-to-static -- mixin dispatch() is an instance method by
+#  contract (the MessageHandler fold calls it through the composed object); a mixin
+#  that happens to touch no members (Reflecting) must keep the same shape.
 Checks: >
   -*,
   bugprone-*,
@@ -29,7 +32,8 @@ Checks: >
   -cppcoreguidelines-pro-type-union-access,
   -bugprone-easily-swappable-parameters,
   -readability-implicit-bool-conversion,
-  -readability-named-parameter
+  -readability-named-parameter,
+  -readability-convert-member-functions-to-static
 WarningsAsErrors: ''
 HeaderFilterRegex: 'lib/.*'
 CheckOptions:

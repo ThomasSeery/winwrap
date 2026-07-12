@@ -90,21 +90,81 @@ result).
   the struct-doc style lives in `cpp/CODE_CONVENTIONS.md` (all projects).
 - **Errors as `std::expected<T, std::error_code>`** at the public API; Win32 codes
   via `std::system_category()`. WIL stays for RAII handles only, not control flow.
-- **Message dispatch via composable CRTP mixins** (`mixins.hpp` +
-  `message_reflection.hpp` + `message_handler.hpp`).
+- **Message dispatch via composable compile-time mixins** (`mixins.hpp` +
+  `message_reflection.hpp` + `message_handler.hpp`); respelled from CRTP to
+  C++23 **deducing this** on 2026-07-12 (see *Dispatch design review* below) —
+  mixins are plain structs whose `dispatch` deduces the final type through an
+  explicit object parameter (`this auto& self`).
   Seven empty-base mixins — `Lifecycle`, `Sizable`, `Commandable`, `Paintable`,
   `MouseInput`, `KeyboardInput`, `FocusAware` — each expose
-  `std::optional<LRESULT> dispatch(UINT, WPARAM, LPARAM)`: engaged = handled,
-  `nullopt` = pass on. `MessageHandler<T, Mixins...>` chains them via a fold
-  expression (`||`), short-circuiting on first match, and its `handle_message`
+  `std::optional<LRESULT> handle(UINT, WPARAM, LPARAM)`: engaged = handled,
+  `nullopt` = pass on. `MessageDispatcher<Mixins...>` chains them via a fold
+  expression (`||`), short-circuiting on first match, and its `dispatch_message`
   falls back to the derived type's `default_proc` when no mixin claims the
   message. Both `Window<T>` and `Control<T>` inherit it. The `WW_CASE(message, call)` macro (defined + `#undef`'d inside
   `mixins.hpp`) is the only tool that can simultaneously put a maybe-absent member
   into an unevaluated `requires` and `return`/`break` from the caller's frame — one
   line per case, zero duplication. No vtables; all resolved at compile time. Derived
-  types define only the **public** `on_*` hooks they need. `handle_message` stays
+  types define only the **public** `on_*` hooks they need. `dispatch_message` stays
   **shadowable** as the escape hatch for runtime-id messages (e.g. the tray
-  callback) — delegate the rest with `Window::handle_message`.
+  callback) — delegate the rest with `Window::dispatch_message`.
+- **Dispatch design review (2026-07-12): held.** Stress-tested against seven
+  alternatives — ATL/WTL macro maps, virtual `WndProc` (Win32++), runtime lambda
+  registries (WinLamb), signal/slot (LFWin32), `constexpr` message tables,
+  concepts-hardening, and a C++23 deducing-this respelling. Why it held: every
+  design that fixes silent hook misses does it by **explicit registration** (a
+  macro-map entry, a table row, an `on_message` call) — that trades the
+  "define `on_paint` and it fires" zero-boilerplate property for a second list to
+  maintain, and the silent miss just moves into that list (a forgotten entry
+  misses identically). Virtual `WndProc` fixes misses via `override` but fixes
+  the *interface*: every hook is a vtable slot whether used or not, per-message
+  typed signatures don't fit, and absent handlers can't compile out. No
+  alternative catches the real overlap hazard either — the `WM_COMMAND` lparam
+  split is value-based, invisible to any msg-id-keyed static check. Runtime
+  honesty (README ammo): one vtable call per message is unmeasurable next to
+  message-delivery cost; the zero-cost win is interface and codegen — EBO,
+  typed hooks, dead branches eliminated — not cycles saved.
+  Follow-ups:
+  - **(a) Additive, recommended — hook-signature hardening.** Extend the macro to
+    `WW_CASE(message, hook, call)`; in the `if constexpr` *else* branch add
+    `static_assert(!requires { &std::remove_cvref_t<decltype(self)>::hook; },
+    "winwrap: '" #hook "' exists but doesn't match the hook signature")` (the
+    final type is spelled from `self` now that no `Derived` parameter exists).
+    A member *named* like the hook whose
+    signature doesn't match becomes a compile error instead of a silent no-fire.
+    `Commandable` (macro-free) gets the same assert by hand. Limits: pure-typo
+    hooks (`on_pain`) still need the synthetic-message Catch2 tests (TECH_DEBT);
+    an overloaded hook name evades the check (acceptable edge).
+  - **(b) ✅ DONE (2026-07-12) — deducing-this respelling (P0847, MSVC since
+    VS 17.4).** Same architecture, simpler spelling at identical codegen: mixins
+    lost `<Derived>` and the `static_cast`s, `Clickable`/`TextChangeable` lost
+    their dummy template params, `MessageHandler`/`Window`/`Control` lost the
+    `template <typename> typename...` template-template params;
+    `handle_message(this auto& self, ...)` deduces the final type at the call
+    site. Accepted cost: the engine's language floor rose from C++20 to C++23
+    (the deferred C++17 backport would need a dispatch rework either way —
+    `requires` already ruled out C++17). Built delivery-mode by Claude; verified:
+    clean MSVC `/W4` + ASan build, 16/16 tests pass.
+    **MSVC gotcha (C7515):** the fold can't expand the pack inside a qualified
+    member access (`self.Mixins::handle(...)`) — worked around via a private
+    static `handle<Mixin>(self, ...)` helper (same name, deliberately), which
+    expands the pack as a template argument instead. GCC/Clang accept the direct
+    form; keep the helper for MSVC.
+    **Naming (2026-07-12, provisional):** engine = `MessageDispatcher` in
+    `message_dispatcher.hpp`, entry = `dispatch_message`, mixin member =
+    `handle`, shared match-and-fire = `handle_notification` — dispatchers
+    dispatch, handlers handle (Reactor-pattern vocabulary; Win32's own
+    `DispatchMessage`). Tommy wants this convention sanity-checked with a fresh
+    review before treating it as settled. *Probed on our toolchain (2026-07-12,
+    MSVC 2022 BuildTools `/std:c++latest`): a prototype engine compiles and
+    dispatches correctly, with one wart — MSVC rejects the pack in
+    `self.Mixins::dispatch(...)` directly inside a fold (C7515); a small private
+    `try_one<Mixin>` helper restores it. Budget for that helper if adopted.*
+  - **(c) Empirical layout note (probed 2026-07-12).** "Empty mixins → zero
+    size" is false on MSVC by default: only the *first* empty base is folded
+    away, so the 8-mixin list costs +8 bytes per window (measured 24 vs 16 with
+    `__declspec(empty_bases)` on `MessageHandler`). Harmless at our scale;
+    recorded in TECH_DEBT (fix or soften the mixins.hpp doc comment).
 - **Class-level config** (the `WNDCLASS`) is customized by a `configure_class`
   hook the derived type shadows — same CRTP mechanism as the `on_*` dispatch.
 - **Doc comments:** Doxygen `///` + `@`-commands on the **public API** only;

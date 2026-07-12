@@ -39,9 +39,12 @@ its place.
 ## Message dispatch — known edges (from the CRTP mixin review)
 
 - **Silent hook misses** — a mis-signatured or typo'd `on_*` hook silently never fires:
-  the `requires`-detection compiles the absent branch out, with no diagnostic. **Resolve:**
-  additive — a Catch2 test per wrapper that pushes a synthetic message through
-  `handle_message` and asserts the hook ran. No engine change. *Recommended.*
+  the `requires`-detection compiles the absent branch out, with no diagnostic. **Resolve**
+  (split by the 2026-07-12 dispatch review): the *mis-signature* half is fixable at
+  compile time — the `WW_CASE` static_assert hardening specced in ROADMAP (*Decisions
+  locked → Dispatch design review*, follow-up a). The *typo* half stays behavioural:
+  a Catch2 test per wrapper that pushes a synthetic message through `dispatch_message`
+  and asserts the hook ran. No engine change either way. *Both recommended.*
 - **`return 0` ceiling** — `WW_CASE` hard-codes `return 0` for every handled message, so a
   hook can't return a meaningful `LRESULT`. Fine for the current fire-and-forget set;
   **revisit when `WM_NOTIFY` / `WM_CTLCOLOR*` land** — either extend `WW_CASE` to carry a
@@ -49,3 +52,9 @@ its place.
 - **Public `on_*` hooks** *(accepted; won't-fix)* — handlers must be `public` because the
   mixin calls them from a different class. Making them private costs friend declarations
   or an accessor shim; not worth it at this scale. Recorded so it isn't relitigated.
+- **MSVC empty-base bloat** — MSVC folds only the *first* empty base to zero bytes; each
+  further empty mixin base costs a byte (+ padding). Measured 2026-07-12: a plain
+  `Window<T>` is 24 bytes vs 16 with `__declspec(empty_bases)` on `MessageDispatcher`, so
+  the mixins.hpp "zero size" doc comment overstates on MSVC. Harmless at our scale (few,
+  heap-allocated windows). **Resolve:** apply `__declspec(empty_bases)` behind a small
+  portability macro (MSVC-only attribute), or just soften the doc comment.

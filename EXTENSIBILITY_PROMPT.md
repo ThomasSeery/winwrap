@@ -1,5 +1,12 @@
 # Extensibility baseline: user mixin packs on Window + FileDroppable as proof
 
+> **✅ DONE (2026-07-12).** Both deliverables landed (`Window<T, Mixins...>` +
+> `FileDroppable`), all acceptance checks pass (tests green incl. a synthetic
+> `WM_DROPFILES` behaviour test; demo grep clean; engine untouched), window
+> recipe added to MIXINS.md. Kept for the record. Note: written against the
+> current CRTP spelling — the adopted deducing-this respell (ROADMAP, follow-up
+> b) will mechanically convert `FileDroppable` and the pack with the rest.
+
 > **Run `DISPATCH_DESIGN_REVIEW_PROMPT.md` first** — it may adjust the engine
 > this task builds on.
 

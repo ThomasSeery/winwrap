@@ -9,6 +9,8 @@ FetchContent_MakeAvailable(Catch2)
 
 add_executable(winwrap_test
     window_test.cpp
+    drop_window_test.cpp
+    file_droppable_test.cpp
     control_test.cpp
     button_test.cpp
     checkbox_test.cpp
