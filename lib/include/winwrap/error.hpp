@@ -19,14 +19,14 @@ inline std::error_code last_error() {
 ///          *not* the INVALID_HANDLE_VALUE (-1) ones like CreateFile*, whose -1
 ///          sentinel reads here as success.
 template <typename H>
-[[nodiscard]] std::expected<H, std::error_code> checked(H handle) {
+[[nodiscard]] std::expected<H, std::error_code> check(H handle) {
     if (handle)
         return handle;
     return std::unexpected(last_error());
 }
 
 /// Wraps a Win32 call that returns BOOL (zero on failure): success, or last_error().
-[[nodiscard]] inline std::expected<void, std::error_code> checked(BOOL ok) {
+[[nodiscard]] inline std::expected<void, std::error_code> check(BOOL ok) {
     if (ok)
         return {};
     return std::unexpected(last_error());
