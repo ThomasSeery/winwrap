@@ -3,46 +3,41 @@
 #include "winwrap/win.hpp"
 
 #include <shellapi.h>
-#include <wil/resource.h>
 
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "winwrap/drop.hpp"
+
 namespace winwrap {
 
-/// Unpacks an HDROP into the dropped-file paths and releases it (DragFinish runs
-/// even if an allocation throws), so the hook never sees the raw handle.
+/// Unpacks an HDROP into the dropped-file paths and releases it -- the Drop view
+/// owns the handle, so DragFinish runs even if an allocation throws.
 inline std::vector<std::wstring> make_dropped_paths(HDROP drop) {
-    auto finish = wil::scope_exit([drop] { DragFinish(drop); });
-    constexpr UINT query_count{0xFFFFFFFF};
-    const UINT count = DragQueryFileW(drop, query_count, nullptr, 0);
-    std::vector<std::wstring> paths;
-    paths.reserve(count);
-    for (UINT i = 0; i < count; ++i) {
-        const UINT len = DragQueryFileW(drop, i, nullptr, 0);
-        std::wstring path(len, L'\0');
-        DragQueryFileW(drop, i, path.data(), len + 1);
-        paths.push_back(std::move(path));
-    }
-    return paths;
+    return Drop{drop}.paths();
 }
 
 /// WINDOW mixin: routes `WM_DROPFILES` to the final type's
-/// `on_files_dropped(const std::vector<std::wstring>&)` when defined.
+/// `on_files_dropped(const std::vector<std::wstring>&)`, and registers the window
+/// to accept dropped files automatically -- no `.ex_style = WS_EX_ACCEPTFILES`.
 ///
-/// Drops only arrive if the window opted in -- create it with
-/// `.ex_style = WS_EX_ACCEPTFILES`, or call `DragAcceptFiles(hwnd(), TRUE)` in
-/// `on_created()`. An opted-in window that omits the hook leaks each drop's
-/// HDROP (raw Win32 behaviour -- nothing claims the message), so define the hook
-/// if you opt in.
+/// Registration runs at `WM_NCCREATE` (the first point the HWND is live) via
+/// `DragAcceptFiles`, and *only* when the final type actually defines the hook:
+/// compose the mixin without `on_files_dropped` and nothing registers, so a
+/// handler-less window accepts -- and leaks -- no drop.
 ///
 /// @note An elevated process receives no drops from a non-elevated Explorer
 ///       (UIPI filters WM_DROPFILES).
 struct FileDroppable {
-    std::optional<LRESULT> handle_message([[maybe_unused]] this auto& self, UINT msg, WPARAM wparam,
-                                          LPARAM) {
+    std::optional<LRESULT> handle_message(this auto& self, UINT msg, WPARAM wparam, LPARAM) {
         switch (msg) {
+            case WM_NCCREATE:
+                if constexpr (requires(const std::vector<std::wstring>& paths) {
+                                  self.on_files_dropped(paths);
+                              })
+                    DragAcceptFiles(self.hwnd(), TRUE);
+                break;
             WW_CASE(WM_DROPFILES,
                     self.on_files_dropped(make_dropped_paths(reinterpret_cast<HDROP>(wparam))));
             default:

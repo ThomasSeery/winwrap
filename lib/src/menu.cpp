@@ -5,16 +5,16 @@
 namespace winwrap {
 
 std::expected<Menu, std::error_code> Menu::create() {
-    return checked(CreatePopupMenu()).transform([](HMENU h) { return Menu{wil::unique_hmenu{h}}; });
+    return check(CreatePopupMenu()).transform([](HMENU h) { return Menu{wil::unique_hmenu{h}}; });
 }
 
 std::expected<void, std::error_code> Menu::add_item(UINT id, const wchar_t* text) {
-    return checked(AppendMenuW(handle_.get(), MF_STRING, id, text));
+    return check(AppendMenuW(handle_.get(), MF_STRING, id, text));
 }
 
 std::expected<void, std::error_code> Menu::add_item(const wchar_t* text,
                                                     std::function<void()> handler) {
-    return checked(AppendMenuW(handle_.get(), MF_STRING, next_id_, text)).transform([&] {
+    return check(AppendMenuW(handle_.get(), MF_STRING, next_id_, text)).transform([&] {
         handlers_.emplace(next_id_++, std::move(handler));
     });
 }

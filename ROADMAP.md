@@ -5,6 +5,10 @@ What's done, what's next, and the spec for each piece. Design rationale lives in
 
 ## ▶ Next session: start here
 
+> **The road to v0.1 is now a punch list: [`PRE_V01_PROMPTS.md`](PRE_V01_PROMPTS.md)**
+> — one self-contained task per fresh session (5 structural, 3 additive), in
+> order. Work through it; everything below stays as background/spec.
+
 **Goal: an MVP usable in wifi-toggle** = `Window` ✓ + `Menu` ✓ + `NotifyIcon`,
 composing through the `on_*` hooks. Design is locked (see *Decisions locked* →
 *Tray / menu integration*) — don't re-litigate; build straight against it.
@@ -38,11 +42,14 @@ Close these before or while wiring — wifi-toggle needs each one:
    `MIXINS.md` recipe, for the status poll. Precedent: WTL's `MSG_WM_TIMER` →
    `OnTimer(UINT_PTR)`; no surveyed library wraps `SetTimer`/`KillTimer` beyond
    raw members, so the app keeps calling those (an RAII guard is additive later).
-3. **Message loop** — stays app-side for the MVP (Microsoft's own NotificationIcon
-   sample uses a plain `GetMessage` loop); a `run_message_loop()` free-function
-   helper is additive later, growing toward accelerators / modeless-dialog /
-   idle handling only if ever needed (WinLamb `RUN()`, Win32++ `CWinApp::Run`,
-   WTL `CMessageLoop` are the precedents).
+3. ~~**Message loop**~~ — ✅ **Done (2026-07-13).** `winwrap/message_loop.hpp`:
+   header-only `run()` (the `GetMessageW`/`TranslateMessage`/`DispatchMessageW` pump;
+   returns `msg.wParam`; `-1` guarded by `FAIL_FAST_IF`) + `quit(int = 0)` (over
+   `PostQuitMessage`). A window exits the app via `on_destroy` → `winwrap::quit()`.
+   Four Catch2 tests (pre-queued quit / dispatch-to-window / FIFO drain / close→exit),
+   MSVC-clean. Accelerators / modeless-dialog / idle handling stay deferred behind a
+   future `RunConfig` overload (WinLamb `RUN()`, Win32++ `CWinApp::Run`, WTL
+   `CMessageLoop` precedents) — additive, not built now. Design: `MESSAGE_LOOP_DESIGN.md`.
 4. ~~**Per-item menu callbacks**~~ — ✅ **Done (2026-07-12).** `add_item(text,
    handler)` + `TPM_RETURNCMD` show; see *Decisions locked → Menu routing
    (revised)*. Remaining acceptance check (from the design task): the wifi-toggle
@@ -75,6 +82,10 @@ result).
   Builds clean (`/W4` + sanitizers), clang-tidy-clean. **Not yet exercised** by an app.
 - **`error.hpp`** — `last_error()` lives in `winwrap/error.hpp` (shared by
   `window.hpp` and `menu.cpp`).
+- **`message_loop.hpp`** — ✅ **Done (2026-07-13).** Header-only `run()` (the message
+  pump; returns `msg.wParam`; `-1` → `FAIL_FAST_IF`) + `quit(int = 0)` (over
+  `PostQuitMessage`). App exits via `on_destroy` → `winwrap::quit()`. Four Catch2 tests,
+  MSVC-clean. Design/rationale: `MESSAGE_LOOP_DESIGN.md`.
 - **Build** — CMake + WIL + install/export + warnings/sanitizers. Solid; no work
   needed.
 
@@ -349,6 +360,36 @@ engine, no theming framework, no widget toolkit. Not a Qt/wxWidgets replacement.
 - **Balloon / toast notifications** over `NotifyIcon`.
 - A typed **`TrayEvent`** enum over the raw tray callback message (additive).
 - A **ctor-arg-forwarding `create`** overload (once `std::forward` is taught).
+- **`Drop` RAII view** — ✅ **Done (2026-07-12; built on request, superseding its
+  parked status).** `winwrap/drop.hpp`: `class Drop final`, move-only owner of
+  the `HDROP` (`DragFinish` in the destructor and on move-assign; hand-written
+  Rule of Five, the `NotifyIcon` precedent), with `count()` / `path(i)` /
+  `paths()` / `point()` / `handle()` hiding the sentinel-index + length-probe
+  protocol. Covers the beyond-the-hook needs: drop coordinates
+  (`DragQueryPoint`), count-only rejection without unpacking, lazy per-file
+  access. `make_dropped_paths` is now `Drop{drop}.paths()` (its `wil::scope_exit`
+  guard is gone — the view *is* the RAII); the mixin's hook is unchanged, purely
+  additive. Renamed free-function pass-throughs over `DragQueryFileW` stay
+  **rejected** per the LIBRARY_CONVENTIONS thin-wrapper rule (renames don't fix
+  the protocol and break MSDN searchability). Tested via fabricated `DROPFILES`
+  blocks: count/path/paths/point + move-transfer.
+- **`FileDroppable` self-registration** — ✅ **Done (2026-07-13).** The mixin now
+  calls `DragAcceptFiles(hwnd(), TRUE)` itself at `WM_NCCREATE` — guarded on the
+  final type defining `on_files_dropped` (`if constexpr (requires …)`), so a
+  handler-less compose registers, and leaks, nothing. A drop window is now just
+  `Window<T, FileDroppable>` + the hook — no `.ex_style = WS_EX_ACCEPTFILES` at
+  the call site. Registration rides `WM_NCCREATE` as a pass-through: `WW_CASE`
+  returns 0 (which would abort creation) and the built-in `Lifecycle` already
+  claims `WM_CREATE`, so neither hook path was available. Tested against a real
+  created window (self-registration bit set).
+- **`DropZone` premade window** — ❌ **Removed (2026-07-13).** Built 2026-07-12,
+  deleted the next day. A window whose *only* job is to be a drop bucket is the
+  ~1% case, and with `FileDroppable` self-registering (above) the mixin path is a
+  two-liner the premade window earned nothing over. Same §3 reasoning that
+  retired the `DropAcceptance` toggle: no real consumer, so no wrapper. Its
+  self-registration test moved onto the mixin. *(The historical design notes in
+  `MESSAGE_LOOP_DESIGN.md` / `PRE_V01_PROMPTS.md` keep their DropZone mentions as
+  a record of the path taken.)*
 - More **RAII-wrapped Win32 objects** as real projects need them.
 - **Catch2 tests** that exercise behaviour without a live message pump.
 

@@ -136,9 +136,12 @@ Rules specific to window mixins:
   `DragAcceptFiles`), document it on the mixin. Don't self-activate off a
   lifecycle message: a built-in (`Lifecycle`) may claim it first and the
   activation silently never runs.
-- **RAII the message's resources inside the helper** (`make_dropped_paths` runs
-  `DragFinish` via `wil::scope_exit`), so the hook can throw safely and the raw
-  handle never reaches user code.
+- **RAII the message's resources inside the helper** (`make_dropped_paths` is
+  `Drop{drop}.paths()` — the `Drop` view in `winwrap/drop.hpp` owns the handle
+  and runs `DragFinish` in its destructor), so the hook can throw safely and the
+  raw handle never reaches user code. Shadowing `handle_message` for custom drop
+  handling? Adopt the wparam into a `Drop` and query `count()` / `path(i)` /
+  `point()` instead of calling `DragQueryFileW` yourself.
 
 ## Rules of thumb
 

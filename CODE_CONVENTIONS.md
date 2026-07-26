@@ -82,7 +82,7 @@ As the library grows, decide *where* a thing belongs by what conceptually needs 
   the "TaskbarCreated" broadcast.
 - **Cross-cutting concerns live in concept-named shared headers.** A utility every
   wrapper uses goes in a focused header named for the concept. `error.hpp`
-  (`last_error`, `checked`) is the precedent. Future shared concepts each get their
+  (`last_error`, `check`) is the precedent. Future shared concepts each get their
   own header (e.g. a reserved `shell.hpp` for shell/taskbar integration commons).
 
 **The move trigger — the second real consumer.** Keep a thing local until a
@@ -96,6 +96,79 @@ eventual move is mechanical; do the **extraction** late, when the trigger fires.
 example: `taskbar_created_message()` stays on `NotifyIcon` today, but its reserved home
 is a future `shell.hpp` — so if an `ITaskbarList3` wrapper ever shares the
 Explorer-restart concern, it moves there with no redesign.
+
+## 4. Thin wrappers — intent verbs, yes; plumbing renames, no
+
+A one-line wrapper over a single Win32 call is sometimes right and sometimes forbidden.
+The deciding test is **not** "how short is it?" but:
+
+> **Does the user need to understand the underlying Win32 call to use this correctly?**
+
+- **No → wrap it (an *intent verb*).** The wrapper names *what the user wants* in
+  winwrap's vocabulary; the underlying call is a detail they never need to know. This
+  is the ergonomics `VISION.md` pillar 1 promises. `quit(int = 0)` over
+  `PostQuitMessage` is the precedent: "quit the app" is the intent, while
+  `PostQuitMessage` ("post a WM_QUIT onto the thread queue") is mechanism the user
+  shouldn't have to learn — and would likely mis-guess (`ExitProcess`? `exit()`?
+  `DestroyWindow`?).
+- **Yes → do *not* rename it.** If the user must understand the call's protocol anyway,
+  a rename hides the searchable Win32 name and adds nothing. `DragQueryFileW` is the
+  precedent: its sentinel-index + length-probe protocol has to be understood either
+  way, so renaming it is pure loss. When such an API deserves ergonomics, wrap the
+  *protocol* in a class (`Drop`), not the *name* in a pass-through.
+
+**Rule of thumb:** wrap the **verb** when it lets the user forget the Win32 call
+entirely; wrap the **protocol** (in a type) when the Win32 mechanics are irreducible;
+never wrap the **name** alone. Pairs with `LIBRARY_CONVENTIONS.md`'s thin-wrapper /
+reactive-extraction rules.
+
+**Precedent:** `winwrap::quit()` (intent verb — wrap), `Drop` (protocol wrapped in a
+type), rejected `DragQueryFileW` renames (name-only — don't).
+
+## 5. A mixin owns the window state its behaviour needs — never split it with the caller
+
+When a mixin's behaviour depends on window setup — an `ex_style` bit, a class
+style, a registration call — the **mixin performs that setup itself**. It must
+**not** require the caller to *also* pass a matching flag at `create`. Composing the
+mixin is the single declaration of intent; everything the behaviour needs is derived
+from it.
+
+Do the setup at the earliest lifecycle point where it's valid — a `WM_NCCREATE`
+case in the mixin's own `handle_message` (the HWND is live from `WM_NCCREATE`) — and
+**guard it on the final type actually defining the hook** (`if constexpr (requires {
+… })`), so composing the mixin without a handler sets up nothing.
+
+```cpp
+// Don't: "accepts drops" lives in two places that must agree, or it breaks silently.
+class App : public Window<App, FileDroppable> { void on_files_dropped(...); };
+App::create({.ex_style = WS_EX_ACCEPTFILES});   // compose here, flag there -> can desync
+
+// Do: composing the mixin is the whole declaration; the mixin self-registers.
+class App : public Window<App, FileDroppable> { void on_files_dropped(...); };
+App::create({});                                 // one source of truth
+```
+
+**Why:**
+
+- **Single source of truth.** One fact ("this window accepts drops") spread across
+  two spots the caller keeps in sync by hand is a redundant invariant — and the gap
+  where they disagree is a silent bug (composed but no flag → no drops, no error).
+  Deriving the setup from the composition makes the two impossible to desync.
+- **Fail-loud, not fail-silent.** The split failed invisibly; self-setup can't be
+  forgotten, so that failure mode is designed out. Same instinct as "make illegal
+  states unrepresentable."
+- **Pass through, don't consume.** Registration on a creation message is a *side
+  effect*: do it, then let the message reach `DefWindowProcW` (`break`, not
+  `return 0`) — consuming `WM_NCCREATE` aborts window creation.
+
+**Scope:** setup a mixin's *own* behaviour requires. Genuinely caller-specific
+choices (window title, geometry, always-on-top) stay in `WindowConfig` — this rule
+is about state that is *implied by composing the mixin*, not general per-window knobs.
+
+**Precedent:** `FileDroppable` self-registers via `DragAcceptFiles(hwnd(), TRUE)` at
+`WM_NCCREATE`, guarded on `on_files_dropped`, so `Window<T, FileDroppable>` needs no
+`.ex_style = WS_EX_ACCEPTFILES`. (Superseded the caller-supplied flag; see ROADMAP,
+2026-07-13.)
 
 ## See also
 
