@@ -4,7 +4,8 @@ Conventions specific to **this library's public API**. They layer on top of, and
 never override:
 
 - `cpp/CODE_CONVENTIONS.md` — naming (`name_`, snake_case), `{}` init, Doxygen `///` style.
-- `cpp/windows/CLAUDE.md` — Win32 house style (Unicode `…W`, WIL RAII, error model).
+- `cpp/windows/CODE_CONVENTIONS.md` — Win32 house style (Unicode `…W`, WIL RAII, error
+  model, the callback→object bridge); `cpp/windows/AGENTS.md` is its short version.
 
 Where those say *how to write C++*, this says *how winwrap shapes its API*.
 
