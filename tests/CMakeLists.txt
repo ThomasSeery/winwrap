@@ -16,7 +16,8 @@ add_executable(winwrap_test
     checkbox_test.cpp
     edit_test.cpp
     combobox_test.cpp
-    message_loop_test.cpp)
+    message_loop_test.cpp
+    fs_test.cpp)
 
 target_link_libraries(winwrap_test
     PRIVATE

@@ -390,6 +390,16 @@ engine, no theming framework, no widget toolkit. Not a Qt/wxWidgets replacement.
   self-registration test moved onto the mixin. *(The historical design notes in
   `MESSAGE_LOOP_DESIGN.md` / `PRE_V01_PROMPTS.md` keep their DropZone mentions as
   a record of the path taken.)*
+- **`fs.hpp` + `shell.hpp`** — ✅ **Done (2026-07-30).** `fs.hpp`: `file_attributes`
+  (hides the `INVALID_FILE_ATTRIBUTES` sentinel), `set_file_attributes`, and the two
+  read-modify-write intent verbs `add_file_attributes` / `remove_file_attributes` (the
+  latter falls back to `FILE_ATTRIBUTE_NORMAL`, since Win32 has no zero mask). All take
+  `const std::filesystem::path&` — on Windows `path::c_str()` is already `wchar_t*`, so
+  the `…W` call costs no conversion. `shell.hpp`: `refresh_folder` over
+  `SHChangeNotify(SHCNE_UPDATEDIR, …)`. Four Catch2 tests. Built because icon-dropper's
+  `set_folder_icon` had bare `…W` calls in its logic; the "wait for a second consumer"
+  trigger explicitly does **not** gate wrapping a raw Win32 call (see
+  `CODE_CONVENTIONS.md` §3).
 - More **RAII-wrapped Win32 objects** as real projects need them.
 - **Catch2 tests** that exercise behaviour without a live message pump.
 

@@ -83,8 +83,8 @@ As the library grows, decide *where* a thing belongs by what conceptually needs 
   the "TaskbarCreated" broadcast.
 - **Cross-cutting concerns live in concept-named shared headers.** A utility every
   wrapper uses goes in a focused header named for the concept. `error.hpp`
-  (`last_error`, `check`) is the precedent. Future shared concepts each get their
-  own header (e.g. a reserved `shell.hpp` for shell/taskbar integration commons).
+  (`last_error`, `check`) is the precedent; `fs.hpp` (file attributes) and `shell.hpp`
+  (Explorer notifications) followed.
 
 **The move trigger — the second real consumer.** Keep a thing local until a
 *second* wrapper genuinely needs it; only then lift it into the appropriate shared
@@ -94,9 +94,18 @@ wrong before you've seen two real uses.
 
 Set the **convention** (the destination + naming) early so there's no sprawl and the
 eventual move is mechanical; do the **extraction** late, when the trigger fires. Worked
-example: `taskbar_created_message()` stays on `NotifyIcon` today, but its reserved home
-is a future `shell.hpp` — so if an `ITaskbarList3` wrapper ever shares the
-Explorer-restart concern, it moves there with no redesign.
+example: `taskbar_created_message()` stays on `NotifyIcon` today, but its home when it
+moves is `shell.hpp` — so if an `ITaskbarList3` wrapper ever shares the Explorer-restart
+concern, it moves there with no redesign.
+
+**The trigger does not apply to raw `…W` calls (2026-07-30).** Reactive extraction
+governs *shared helpers between wrappers*, not *whether a Win32 call gets wrapped at
+all*: a consuming app's logic must never contain bare `…W` calls, so the wrapper is
+owed on the first consumer, not the second. That's the whole promise of the library —
+features you get without touching Windows functions directly. `fs.hpp`
+(`file_attributes`, `set_file_attributes`, `add_file_attributes`,
+`remove_file_attributes`) and `shell.hpp` (`refresh_folder`) exist because
+icon-dropper's `set_folder_icon` needed them once each.
 
 ## 4. Thin wrappers — intent verbs, yes; plumbing renames, no
 
