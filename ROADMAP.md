@@ -303,6 +303,89 @@ id); lives as a member of the derived window, created in `on_created()`; targets
 Once v0.1 ships (Window + Menu + NotifyIcon, wired into wifi-toggle and tagged),
 here's the planned order. **None of this blocks v0.1.**
 
+### Coverage gaps (2026-07-30 survey vs WinLamb / Win32++ / WTL)
+
+A second library comparison, this one asking "what building block is missing?" rather
+than the 2026-07-12 one's "what does wifi-toggle need?". Checked against the full
+contents of `lib/include/winwrap/`, not a name scan. Feeds the v0.2 / v0.3 sections
+below; nothing here is a new pillar.
+
+**The finding: the sharpest gaps are holes inside wrappers already shipped, not
+missing wrappers.** In priority order:
+
+1. **`PaintDc` — `on_paint()` hands the user nothing** *(recommended next)*.
+   `Paintable` fires `self.on_paint()` with no DC, and the library contains no
+   `BeginPaint` at all, so every user of the hook hand-rolls the
+   `BeginPaint`/`PAINTSTRUCT`/`EndPaint` pairing — the exact must-not-forget cleanup
+   pillar 4 promises to own. All three libraries wrap the DC (WTL `atlgdi.h`, Win32++
+   `CPaintDC`, WinLamb `gdi.h`). Shape: an RAII `PaintDc` over a *borrowed* HWND,
+   passed as `on_paint(PaintDc&)` — the `Drop` precedent (wrap the protocol in a type,
+   §4). Note the `WW_CASE` `return 0` ceiling doesn't bite here (`WM_PAINT` wants 0).
+2. **`WM_NOTIFY` reflection — an engine gap, not a control gap.**
+   `message_reflection.hpp` already says "`WM_NOTIFY` joins here when it lands."
+   ListView, TreeView, Tab, Slider and DateTimePicker *all* notify this way, so none
+   are buildable until it does. **Do this before adding any more controls.** Trips the
+   `return 0` ceiling recorded in TECH_DEBT — resolve that at the same time.
+3. **Right-click hooks — the missing half of `Menu`.** `MouseInput` covers
+   `WM_MOUSEMOVE` / `WM_LBUTTONDOWN` / `WM_LBUTTONUP` only, so a window that owns a
+   context `Menu` can't detect the click that should show it. Add `on_rbutton_down` /
+   `on_rbutton_up` (and consider `WM_CONTEXTMENU`, which also covers the keyboard menu
+   key). *Not* a v0.1 blocker: the tray path delivers `WM_CONTEXTMENU` through
+   `NotifyIcon`'s callback message, not through `MouseInput`.
+4. **UTF-8 ↔ UTF-16 conversion is absent.** No `MultiByteToWideChar` /
+   `WideCharToMultiByte` anywhere in `include/` or `src/`. The house style mandates
+   UTF-8 core / UTF-16 boundary and the whole API takes `const wchar_t*`, yet the
+   library gives callers no way to cross that boundary. `std::codecvt` is deprecated
+   and WIL has no converter, so this is a legitimate roll-your-own (WinLamb ships
+   `str.h` for it). Precedent for the home: a concept-named shared header per §3.
+5. Smaller holes in the same class: **`InitCommonControlsEx` is never called** (fine
+   for the current BUTTON/EDIT/COMBOBOX — user32 classes — but ProgressBar / ListView
+   / StatusBar will fail to create); **`WindowHandle` lacks** `client_rect`, `move`,
+   `invalidate`, `focus`, `destroy`, `set_font`, `dpi`; **`Menu` has no** separator,
+   submenu, check/enable, or menu bar.
+
+**New wrappers worth building**, ranked, all of them building blocks rather than
+features:
+
+| Thing | Survey evidence | Verdict |
+|---|---|---|
+| Common dialogs — `IFileOpenDialog`, folder picker, `TaskDialogIndirect` | WinLamb `sysdlg.h`, Win32++ `CFileDialog`/`CTaskDialog`, WTL `atldlgs.h` | **build** — best value-per-line on the list: fallible → `std::expected`, `*Config` struct, needs no window framework |
+| `Timable` mixin + `SetTimer`/`KillTimer` RAII | WTL `MSG_WM_TIMER` | **build** — already listed as a wifi-toggle gap above |
+| `load_icon` helper (`LoadImageW` / `LoadIconMetric`) | WinLamb `icon.h` | **build** — `NotifyIcon` currently demands a caller-made `HICON`; every tray app needs this |
+| `Point` / `Size` / `Rect` value types | Win32++ `CRect`, WTL `atlmisc.h` | **build, small** — hooks pass raw `int x, int y` / `WORD w, h` today |
+| `on_dpi_changed` mixin (`WM_DPICHANGED`) | **nothing** covers it — WTL and Win32++ both predate Per-Monitor v2 | **build** — the manifest already mandates PMv2, and it's a real edge over the legacy libraries |
+| Label (STATIC), ListBox, ProgressBar, RadioButton | all three | **build after** items 2 and 5 above — these four need no `WM_NOTIFY` |
+| ListView / TreeView / Tab / StatusBar | all three | **defer** — gated on `WM_NOTIFY`, and each is a large surface (WinLamb spends four internal headers on ListView alone) |
+| `ITaskbarList3` progress over `shell.hpp` | WinLamb `progress_taskbar.h` | **later** — §3 reserved `shell.hpp` for this, and as of 2026-07-30 that header exists, so the home is real |
+
+**Explicitly not building** — recorded so it isn't relitigated. These appear across the
+surveyed libraries because they predate modern C++ / WIL, not because winwrap needs them:
+
+- Files, registry, memory-mapped files (`CFile`, `CRegKey`, WinLamb
+  `file.h`/`file_ini.h`/`file_mapped.h`) → `wil::unique_hfile`, `wil::unique_hkey`,
+  `wil::reg`, `std::filesystem`. (`fs.hpp` is not a counterexample — it wraps bare
+  `…W` calls an app was making raw, it doesn't re-own the resource.)
+- Strings and time (`CString`, `CTime`) → `std::wstring`, `std::chrono`.
+- Threads and synchronisation (`CWinThread`, `CCriticalSection`, `CEvent`, `CMutex`) →
+  `std::thread`, `std::mutex`, `std::condition_variable`.
+- COM plumbing (`com_ptr`, `com_bstr`, `com_variant`) → `wil::com_ptr`.
+- WinLamb's grab-bag — `zip.h`, `xml.h`, `download.h`, `version.h`, sockets. Not Win32
+  wrapping; 2016 simply had no alternative.
+- MDI, docking, ribbon, splitters, scroll views, property sheets, printing, themes —
+  the framework side of the VISION line.
+- **`CResizer` / WinLamb `resizer.h`** (auto-reposition children on resize) — the thin
+  end of a layout engine, which VISION rules out. Flagged because it's the one item
+  two of the three surveyed libraries judged essential and we're still declining.
+
+**Open scope question — resource-template dialogs.** WinLamb devotes four headers to
+them (`dialog_main` / `dialog_modal` / `dialog_modeless` / `dialog_control`); Win32++
+and WTL both make `CDialog` a peer of `CWnd`. It's a genuine second lifecycle —
+`.rc` templates, `DialogBoxParamW`, `WM_INITDIALOG` instead of `WM_NCCREATE`,
+`DWLP_USER` instead of `GWLP_USERDATA`, plus a `RunConfig` loop change for modeless —
+so it's a `Dialog<T>` sibling to `Window<T>`, not an addition. Declining it is
+defensible for a code-first library, but it's the one place we'd diverge from all
+three surveyed libraries, so **decide it deliberately** rather than by omission.
+
 ### v0.2 — Controls (`Control<T>` — the CRTP control base)
 
 > **✅ `Control<T>` done** (2026-06-28) — implemented + MSVC-verified (compiles + links
